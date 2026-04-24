@@ -544,6 +544,37 @@
             border: 2px solid white;
         }
 
+        .call-status-badge {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10002;
+            display: flex;
+            gap: 15px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-badge.muted {
+            color: #ef4444;
+        }
+
+        .status-badge.camera-off {
+            color: #f59e0b;
+        }
+
+        .status-icon {
+            font-size: 16px;
+        }
+
         .call-controls {
             position: absolute;
             bottom: 30px;
@@ -587,6 +618,27 @@
 
         .incoming-call.show {
             display: block;
+        }
+
+        .calling-status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 10002;
+            background: rgba(0,0,0,0.7);
+            padding: 20px 40px;
+            border-radius: 20px;
+        }
+
+        .calling-status h2 {
+            margin-bottom: 10px;
+        }
+
+        .calling-status p {
+            color: #aaa;
         }
 
         @keyframes slideIn {
@@ -688,10 +740,27 @@
         <div id="remoteAvatar" class="remote-avatar"></div>
         <video id="localVideo" class="local-video" autoplay playsinline muted style="display: none;"></video>
         <div id="localAvatar" class="local-avatar"></div>
+        
+        <div id="callStatusBadges" class="call-status-badge">
+            <div id="muteBadge" class="status-badge" style="display: none;">
+                <span class="status-icon">🎤</span>
+                <span>Muted</span>
+            </div>
+            <div id="cameraBadge" class="status-badge" style="display: none;">
+                <span class="status-icon">📷</span>
+                <span>Camera Off</span>
+            </div>
+        </div>
+        
+        <div id="callingStatus" class="calling-status" style="display: none;">
+            <h2>Calling...</h2>
+            <p>Ringing</p>
+        </div>
+        
         <div class="call-controls">
-            <button id="toggleMuteBtn" onclick="toggleMute()">Mute</button>
-            <button id="toggleVideoBtn" onclick="toggleVideo()">Camera Off</button>
-            <button id="endCallBtn" class="end-call" onclick="endCall()">End</button>
+            <button id="toggleMuteBtn" onclick="toggleMute()">🔇 Mute</button>
+            <button id="toggleVideoBtn" onclick="toggleVideo()">📹 Camera Off</button>
+            <button id="endCallBtn" class="end-call" onclick="endCall()">🔴 End</button>
         </div>
     </div>
 
@@ -724,6 +793,24 @@
         let incomingCallData = null;
         let callRingtone = null;
         let callRingtoneTimeout = null;
+        let isCalling = false;
+
+        function updateCallBadges() {
+            const muteBadge = document.getElementById('muteBadge');
+            const cameraBadge = document.getElementById('cameraBadge');
+            
+            if (isMuted) {
+                muteBadge.style.display = 'flex';
+            } else {
+                muteBadge.style.display = 'none';
+            }
+            
+            if (isVideoOff) {
+                cameraBadge.style.display = 'flex';
+            } else {
+                cameraBadge.style.display = 'none';
+            }
+        }
 
         function playMessageSound() {
             const audio = document.getElementById('messageSound');
@@ -800,7 +887,6 @@
             const remoteAvatar = document.getElementById('remoteAvatar');
             const localVideo = document.getElementById('localVideo');
             const localAvatar = document.getElementById('localAvatar');
-            const friend = users.find(u => u.id === currentChatFriend?.id);
             
             if (isVideoOff || !localStream) {
                 localVideo.style.display = 'none';
@@ -813,7 +899,7 @@
                 localAvatar.style.display = 'none';
             }
             
-            if (currentCall && (!currentCall._remoteStream || isVideoOff)) {
+            if (currentCall && !currentCall._remoteStream) {
                 remoteVideo.style.display = 'none';
                 remoteAvatar.style.display = 'flex';
                 if (currentChatFriend) {
@@ -823,9 +909,14 @@
                 remoteVideo.style.display = 'block';
                 remoteAvatar.style.display = 'none';
             }
+            
+            updateCallBadges();
         }
 
         async function startVideoCall(friendId, friendName) {
+            isCalling = true;
+            document.getElementById('callingStatus').style.display = 'block';
+            
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
                 if (localStream) {
@@ -845,6 +936,8 @@
                 call.on('stream', (remoteStream) => {
                     currentCall._remoteStream = remoteStream;
                     document.getElementById('remoteVideo').srcObject = remoteStream;
+                    document.getElementById('callingStatus').style.display = 'none';
+                    isCalling = false;
                     updateCallUI();
                 });
                 
@@ -857,6 +950,9 @@
             } catch (err) {
                 console.error('Camera error:', err);
                 showToast('Cannot access camera/microphone', 'error');
+                isCalling = false;
+                document.getElementById('callingStatus').style.display = 'none';
+                endCall();
             }
         }
 
@@ -894,6 +990,7 @@
             } catch (err) {
                 console.error('Camera error:', err);
                 showToast('Cannot access camera/microphone', 'error');
+                endCall();
             }
         }
 
@@ -909,6 +1006,7 @@
 
         function endCall() {
             stopCallRingtone();
+            isCalling = false;
             if (currentCall) {
                 currentCall.close();
                 currentCall = null;
@@ -920,12 +1018,14 @@
             document.getElementById('callContainer').classList.remove('active');
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('localVideo').srcObject = null;
+            document.getElementById('callingStatus').style.display = 'none';
             document.getElementById('remoteVideo').style.display = 'none';
             document.getElementById('remoteAvatar').style.display = 'flex';
             isMuted = false;
             isVideoOff = true;
-            document.getElementById('toggleMuteBtn').textContent = 'Mute';
-            document.getElementById('toggleVideoBtn').textContent = 'Camera Off';
+            document.getElementById('toggleMuteBtn').textContent = '🔇 Mute';
+            document.getElementById('toggleVideoBtn').textContent = '📹 Camera Off';
+            updateCallBadges();
         }
 
         function toggleMute() {
@@ -934,7 +1034,8 @@
                 if (audioTrack) {
                     audioTrack.enabled = !audioTrack.enabled;
                     isMuted = !audioTrack.enabled;
-                    document.getElementById('toggleMuteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
+                    document.getElementById('toggleMuteBtn').textContent = isMuted ? '🔊 Unmute' : '🔇 Mute';
+                    updateCallBadges();
                 }
             }
         }
@@ -945,12 +1046,12 @@
                 if (videoTrack) {
                     videoTrack.enabled = !videoTrack.enabled;
                     isVideoOff = !videoTrack.enabled;
-                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
+                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Camera On' : '📹 Camera Off';
                     updateCallUI();
                 }
             } else {
                 isVideoOff = !isVideoOff;
-                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
+                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Camera On' : '📹 Camera Off';
                 updateCallUI();
             }
         }
@@ -1143,7 +1244,7 @@
         }
 
         function showLogin() {
-            document.getElementById('authTitle').textContent = 'if your seeing this thats means it broken or smh ';
+            document.getElementById('authTitle').textContent = 'Welcome Back';
             document.getElementById('registerForm').style.display = 'none';
             document.getElementById('loginForm').style.display = 'block';
             document.getElementById('loginError').classList.remove('show');
@@ -1344,7 +1445,7 @@
                             <div class="friend-name">${escapeHtml(friend.username)}</div>
                             <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
                         </div>
-                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
+                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">📞 Video Call</button>
                     </div>
                 `).join('');
             } catch (error) { console.error('Failed to load friends:', error); }
