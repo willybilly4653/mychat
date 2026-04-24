@@ -385,8 +385,8 @@ io.on('connection', (socket) => {
 
     if (!senderId || !receiverId || !text) return;
 
-    if (containsProfanity(text) || containsEmoji(text)) {
-      socket.emit('message-blocked', { message: 'Message contains inappropriate content' });
+    if (containsEmoji(text)) {
+      socket.emit('message-blocked', { message: 'Emojis are not allowed in messages' });
       return;
     }
 
