@@ -24,16 +24,17 @@ const messages = new Map();
 const refreshTokens = new Set();
 const friendRequests = new Map();
 
-const JWT_SECRET = 'your-secret-key-change-this';
-const JWT_REFRESH_SECRET = 'your-refresh-secret-key-change-this';
+const JWT_SECRET = 'your-secret-key-change-this-make-it-very-long-and-random';
+const JWT_REFRESH_SECRET = 'your-refresh-secret-key-change-this-too';
+const ADMIN_SECRET_KEY = 'your-super-secret-admin-key-only-you-know'; // Change this!
 
 function getChatKey(userId1, userId2) {
   return [userId1, userId2].sort().join('_');
 }
 
-function generateTokens(userId, username) {
-  const accessToken = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ userId, username }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+function generateTokens(userId, username, role = 'user') {
+  const accessToken = jwt.sign({ userId, username, role }, JWT_SECRET, { expiresIn: '15m' });
+  const refreshToken = jwt.sign({ userId, username, role }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
   refreshTokens.add(refreshToken);
   return { accessToken, refreshToken };
 }
@@ -55,6 +56,13 @@ function authenticateToken(req, res, next) {
   });
 }
 
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
 function containsProfanity(text) {
   const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
   const lowerText = text.toLowerCase();
@@ -71,7 +79,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, adminKey } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -111,6 +119,12 @@ app.post('/api/register', async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
   const userId = Date.now().toString();
+  
+  let role = 'user';
+  if (adminKey && adminKey === ADMIN_SECRET_KEY) {
+    role = 'admin';
+  }
+  
   const newUser = {
     id: userId,
     username,
@@ -118,15 +132,16 @@ app.post('/api/register', async (req, res) => {
     friends: [],
     online: false,
     socketId: null,
+    role: role,
     createdAt: new Date().toISOString()
   };
 
   users.set(userId, newUser);
-  const { accessToken, refreshToken } = generateTokens(userId, username);
+  const { accessToken, refreshToken } = generateTokens(userId, username, role);
 
   res.status(201).json({
     message: 'User created successfully',
-    user: { id: userId, username, friends: [] },
+    user: { id: userId, username, friends: [], role: role },
     accessToken,
     refreshToken
   });
@@ -156,11 +171,11 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const { accessToken, refreshToken } = generateTokens(foundUser.id, foundUser.username);
+  const { accessToken, refreshToken } = generateTokens(foundUser.id, foundUser.username, foundUser.role);
 
   res.json({
     message: 'Logged in successfully',
-    user: { id: foundUser.id, username: foundUser.username, friends: foundUser.friends },
+    user: { id: foundUser.id, username: foundUser.username, friends: foundUser.friends, role: foundUser.role },
     accessToken,
     refreshToken
   });
@@ -171,7 +186,61 @@ app.get('/api/user', authenticateToken, (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
-  res.json({ id: user.id, username: user.username, friends: user.friends });
+  res.json({ id: user.id, username: user.username, friends: user.friends, role: user.role });
+});
+
+app.get('/api/admin/users', authenticateToken, requireAdmin, (req, res) => {
+  const allUsers = [];
+  for (let user of users.values()) {
+    allUsers.push({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      online: user.online,
+      friendsCount: user.friends.length,
+      createdAt: user.createdAt
+    });
+  }
+  res.json(allUsers);
+});
+
+app.delete('/api/admin/users/:userId', authenticateToken, requireAdmin, (req, res) => {
+  const { userId } = req.params;
+  const userToDelete = users.get(userId);
+  
+  if (!userToDelete) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  users.delete(userId);
+  res.json({ message: `User ${userToDelete.username} has been deleted` });
+});
+
+app.post('/api/admin/make-admin/:userId', authenticateToken, requireAdmin, (req, res) => {
+  const { userId } = req.params;
+  const user = users.get(userId);
+  
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  user.role = 'admin';
+  users.set(userId, user);
+  res.json({ message: `${user.username} is now an admin` });
+});
+
+app.get('/api/admin/stats', authenticateToken, requireAdmin, (req, res) => {
+  let totalMessages = 0;
+  for (let chatMessages of messages.values()) {
+    totalMessages += chatMessages.length;
+  }
+  
+  res.json({
+    totalUsers: users.size,
+    totalMessages: totalMessages,
+    onlineUsers: Array.from(users.values()).filter(u => u.online).length,
+    totalFriendRequests: friendRequests.size
+  });
 });
 
 app.post('/api/refresh-token', (req, res) => {
@@ -186,7 +255,7 @@ app.post('/api/refresh-token', (req, res) => {
       return res.status(403).json({ error: 'Invalid refresh token' });
     }
 
-    const newAccessToken = jwt.sign({ userId: user.userId, username: user.username }, JWT_SECRET, { expiresIn: '15m' });
+    const newAccessToken = jwt.sign({ userId: user.userId, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
     res.json({ accessToken: newAccessToken });
   });
 });
@@ -466,4 +535,6 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Admin secret key is: ${ADMIN_SECRET_KEY}`);
+  console.log(`To create an admin account, register with adminKey: ${ADMIN_SECRET_KEY}`);
 });
