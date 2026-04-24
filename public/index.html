@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mychat</title>
+    <title>Mychat - With Video Calls</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -268,7 +269,6 @@
             gap: 12px;
             padding: 10px;
             border-radius: 12px;
-            cursor: pointer;
             transition: all 0.2s;
         }
 
@@ -293,6 +293,7 @@
 
         .friend-info {
             flex: 1;
+            cursor: pointer;
         }
 
         .friend-name {
@@ -307,6 +308,21 @@
 
         .friend-status.online {
             color: var(--success);
+        }
+
+        .call-btn {
+            background: #10b981;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .call-btn:hover {
+            transform: scale(1.05);
+            background: #059669;
         }
 
         .request-item {
@@ -457,12 +473,98 @@
             padding: 40px;
         }
 
+        /* Video Call Modal */
+        .call-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000;
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .call-container.active {
+            display: flex;
+        }
+
+        .remote-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .local-video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 120px;
+            border-radius: 10px;
+            border: 2px solid white;
+            cursor: pointer;
+        }
+
+        .call-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            z-index: 10001;
+        }
+
+        .call-controls button {
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 30px;
+            margin: 0 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .call-controls button:hover {
+            transform: scale(1.05);
+        }
+
+        .end-call {
+            background: red !important;
+        }
+
+        .incoming-call {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: #1a1a2e;
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 15px 20px;
+            z-index: 10001;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .incoming-call.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 width: 80px;
             }
             .user-details, .friend-info .friend-status, .friend-name {
                 display: none;
+            }
+            .local-video {
+                width: 80px;
             }
         }
     </style>
@@ -507,7 +609,7 @@
                     <div class="username" id="currentUsername">User</div>
                     <div class="status" id="onlineStatus">● Online</div>
                 </div>
-                <button class="logout-btn" onclick="logout()"></button>
+                <button class="logout-btn" onclick="logout()">🚪</button>
             </div>
             <div class="friends-section">
                 <button class="add-friend-btn" onclick="toggleSearch()">+ Add Friend</button>
@@ -536,6 +638,25 @@
         </div>
     </div>
 
+    <!-- Video Call UI -->
+    <div id="callContainer" class="call-container">
+        <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+        <video id="localVideo" class="local-video" autoplay playsinline muted></video>
+        <div class="call-controls">
+            <button id="toggleMuteBtn" onclick="toggleMute()">🔇 Mute</button>
+            <button id="toggleVideoBtn" onclick="toggleVideo()">📹 Video Off</button>
+            <button id="endCallBtn" class="end-call" onclick="endCall()">🔴 End Call</button>
+        </div>
+    </div>
+
+    <div id="incomingCall" class="incoming-call">
+        <div id="callerName"></div>
+        <div style="margin-top: 10px;">
+            <button onclick="acceptCall()" style="background: #10b981; color: white; padding: 8px 16px; border: none; border-radius: 8px; margin-right: 10px;">Accept</button>
+            <button onclick="rejectCall()" style="background: #ef4444; color: white; padding: 8px 16px; border: none; border-radius: 8px;">Reject</button>
+        </div>
+    </div>
+
     <script>
         const API_URL = '';
         let socket = null;
@@ -545,6 +666,143 @@
         let refreshToken = null;
         let typingTimeout = null;
         let pendingRequestsList = [];
+        
+        // Video call variables
+        let peer = null;
+        let currentCall = null;
+        let localStream = null;
+        let isMuted = false;
+        let isVideoOff = false;
+        let incomingCallData = null;
+
+        // Initialize PeerJS for video calls
+        function initPeer() {
+            peer = new Peer(currentUser.id, {
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            peer.on('open', (id) => {
+                console.log('Peer ready! ID:', id);
+                socket.emit('peer-ready', { peerId: id });
+            });
+            
+            peer.on('call', (call) => {
+                incomingCallData = call;
+                document.getElementById('callerName').textContent = `${call.metadata?.fromName} is calling you!`;
+                document.getElementById('incomingCall').classList.add('show');
+            });
+            
+            peer.on('error', (err) => {
+                console.error('Peer error:', err);
+                showToast('Call error: ' + err.message, 'error');
+            });
+        }
+
+        async function startVideoCall(friendId, friendName) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('callContainer').classList.add('active');
+                
+                const call = peer.call(friendId, localStream, {
+                    metadata: { fromName: currentUser.username }
+                });
+                
+                call.on('stream', (remoteStream) => {
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                });
+                
+                call.on('close', () => {
+                    endCall();
+                });
+                
+                currentCall = call;
+                showToast(`Calling ${friendName}...`, 'info');
+            } catch (err) {
+                console.error('Camera error:', err);
+                showToast('Cannot access camera/microphone', 'error');
+            }
+        }
+
+        async function acceptCall() {
+            const call = incomingCallData;
+            if (!call) return;
+            
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('callContainer').classList.add('active');
+                
+                call.answer(localStream);
+                call.on('stream', (remoteStream) => {
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                });
+                call.on('close', () => {
+                    endCall();
+                });
+                
+                currentCall = call;
+                document.getElementById('incomingCall').classList.remove('show');
+                incomingCallData = null;
+            } catch (err) {
+                console.error('Camera error:', err);
+                showToast('Cannot access camera/microphone', 'error');
+            }
+        }
+
+        function rejectCall() {
+            if (incomingCallData) {
+                incomingCallData.close();
+                incomingCallData = null;
+            }
+            document.getElementById('incomingCall').classList.remove('show');
+            showToast('Call rejected', 'info');
+        }
+
+        function endCall() {
+            if (currentCall) {
+                currentCall.close();
+                currentCall = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            document.getElementById('callContainer').classList.remove('active');
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('localVideo').srcObject = null;
+            isMuted = false;
+            isVideoOff = false;
+            document.getElementById('toggleMuteBtn').textContent = '🔇 Mute';
+            document.getElementById('toggleVideoBtn').textContent = '📹 Video Off';
+        }
+
+        function toggleMute() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.enabled = !audioTrack.enabled;
+                    isMuted = !audioTrack.enabled;
+                    document.getElementById('toggleMuteBtn').textContent = isMuted ? '🔊 Unmute' : '🔇 Mute';
+                }
+            }
+        }
+
+        function toggleVideo() {
+            if (localStream) {
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.enabled = !videoTrack.enabled;
+                    isVideoOff = !videoTrack.enabled;
+                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Video On' : '📹 Video Off';
+                }
+            }
+        }
 
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
@@ -748,6 +1006,7 @@
                 }).catch(() => {});
             }
             if (socket) socket.disconnect();
+            if (peer) peer.destroy();
             currentUser = null;
             currentChatFriend = null;
             accessToken = null;
@@ -798,6 +1057,9 @@
                         statusEl.className = `friend-status ${data.online ? 'online' : ''}`;
                     }
                 }
+            });
+            socket.on('peer-id', (data) => {
+                console.log('Friend peer ID:', data);
             });
         }
 
@@ -921,12 +1183,13 @@
                     return;
                 }
                 friendsList.innerHTML = friends.map(friend => `
-                    <div class="friend-item ${currentChatFriend && currentChatFriend.id === friend.id ? 'active' : ''}" onclick="selectFriend('${friend.id}', '${escapeHtml(friend.username)}')">
+                    <div class="friend-item">
                         <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
-                        <div class="friend-info">
+                        <div class="friend-info" onclick="selectFriend('${friend.id}', '${escapeHtml(friend.username)}')">
                             <div class="friend-name">${escapeHtml(friend.username)}</div>
                             <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
                         </div>
+                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">📞 Video Call</button>
                     </div>
                 `).join('');
             } catch (error) { console.error('Failed to load friends:', error); }
@@ -1015,6 +1278,7 @@
             await loadFriends();
             await loadPendingRequests();
             initSocket();
+            initPeer();
         }
 
         const savedAccessToken = localStorage.getItem('accessToken');
