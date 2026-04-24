@@ -5,6 +5,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,23 +21,85 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+const USERS_FILE = './users.json';
+const MESSAGES_FILE = './messages.json';
+const TOKENS_FILE = './tokens.json';
+const REQUESTS_FILE = './requests.json';
+
 const users = new Map();
 const messages = new Map();
 const refreshTokens = new Set();
 const friendRequests = new Map();
+const userSessions = new Map();
+
+function loadData() {
+    try {
+        if (fs.existsSync(USERS_FILE)) {
+            const savedUsers = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+            savedUsers.forEach(user => users.set(user.id, user));
+            console.log(`Loaded ${users.size} users`);
+        }
+        if (fs.existsSync(MESSAGES_FILE)) {
+            const savedMessages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+            Object.entries(savedMessages).forEach(([key, msgs]) => messages.set(key, msgs));
+            console.log(`Loaded messages`);
+        }
+        if (fs.existsSync(TOKENS_FILE)) {
+            const savedTokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
+            savedTokens.forEach(token => refreshTokens.add(token));
+            console.log(`Loaded ${refreshTokens.size} tokens`);
+        }
+        if (fs.existsSync(REQUESTS_FILE)) {
+            const savedRequests = JSON.parse(fs.readFileSync(REQUESTS_FILE, 'utf8'));
+            Object.entries(savedRequests).forEach(([key, reqs]) => friendRequests.set(key, reqs));
+            console.log(`Loaded friend requests`);
+        }
+    } catch (err) {
+        console.error('Error loading data:', err);
+    }
+}
+
+function saveData() {
+    try {
+        const usersArray = Array.from(users.values());
+        fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2));
+        
+        const messagesObj = {};
+        for (let [key, value] of messages) {
+            messagesObj[key] = value;
+        }
+        fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesObj, null, 2));
+        
+        const tokensArray = Array.from(refreshTokens);
+        fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokensArray, null, 2));
+        
+        const requestsObj = {};
+        for (let [key, value] of friendRequests) {
+            requestsObj[key] = value;
+        }
+        fs.writeFileSync(REQUESTS_FILE, JSON.stringify(requestsObj, null, 2));
+        
+        console.log('Data saved');
+    } catch (err) {
+        console.error('Error saving data:', err);
+    }
+}
+
+setInterval(saveData, 30000);
 
 const JWT_SECRET = 'your-secret-key-change-this-make-it-very-long-and-random';
 const JWT_REFRESH_SECRET = 'your-refresh-secret-key-change-this-too';
-const ADMIN_SECRET_KEY = 'your-super-secret-admin-key-only-you-know'; // Change this!
+const ADMIN_SECRET_KEY = 'your-super-secret-admin-key-only-you-know';
 
 function getChatKey(userId1, userId2) {
   return [userId1, userId2].sort().join('_');
 }
 
-function generateTokens(userId, username, role = 'user') {
-  const accessToken = jwt.sign({ userId, username, role }, JWT_SECRET, { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ userId, username, role }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+function generateTokens(userId, username, role, sessionId) {
+  const accessToken = jwt.sign({ userId, username, role, sessionId }, JWT_SECRET, { expiresIn: '7d' });
+  const refreshToken = jwt.sign({ userId, username, role, sessionId }, JWT_REFRESH_SECRET, { expiresIn: '30d' });
   refreshTokens.add(refreshToken);
+  saveData();
   return { accessToken, refreshToken };
 }
 
@@ -51,6 +115,12 @@ function authenticateToken(req, res, next) {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
+    
+    const session = userSessions.get(user.userId);
+    if (session && session.sessionId !== user.sessionId) {
+      return res.status(401).json({ error: 'Session expired. Please login again.' });
+    }
+    
     req.user = user;
     next();
   });
@@ -119,6 +189,7 @@ app.post('/api/register', async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
   const userId = Date.now().toString();
+  const sessionId = crypto.randomBytes(32).toString('hex');
   
   let role = 'user';
   if (adminKey && adminKey === ADMIN_SECRET_KEY) {
@@ -137,7 +208,10 @@ app.post('/api/register', async (req, res) => {
   };
 
   users.set(userId, newUser);
-  const { accessToken, refreshToken } = generateTokens(userId, username, role);
+  userSessions.set(userId, { sessionId, createdAt: Date.now() });
+  const { accessToken, refreshToken } = generateTokens(userId, username, role, sessionId);
+  
+  saveData();
 
   res.status(201).json({
     message: 'User created successfully',
@@ -171,7 +245,11 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const { accessToken, refreshToken } = generateTokens(foundUser.id, foundUser.username, foundUser.role);
+  const sessionId = crypto.randomBytes(32).toString('hex');
+  userSessions.set(foundUser.id, { sessionId, createdAt: Date.now() });
+  const { accessToken, refreshToken } = generateTokens(foundUser.id, foundUser.username, foundUser.role, sessionId);
+  
+  saveData();
 
   res.json({
     message: 'Logged in successfully',
@@ -187,6 +265,11 @@ app.get('/api/user', authenticateToken, (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
   res.json({ id: user.id, username: user.username, friends: user.friends, role: user.role });
+});
+
+app.post('/api/logout-all-devices', authenticateToken, (req, res) => {
+  userSessions.delete(req.user.userId);
+  res.json({ message: 'Logged out from all devices' });
 });
 
 app.get('/api/admin/users', authenticateToken, requireAdmin, (req, res) => {
@@ -213,6 +296,8 @@ app.delete('/api/admin/users/:userId', authenticateToken, requireAdmin, (req, re
   }
   
   users.delete(userId);
+  userSessions.delete(userId);
+  saveData();
   res.json({ message: `User ${userToDelete.username} has been deleted` });
 });
 
@@ -226,6 +311,7 @@ app.post('/api/admin/make-admin/:userId', authenticateToken, requireAdmin, (req,
   
   user.role = 'admin';
   users.set(userId, user);
+  saveData();
   res.json({ message: `${user.username} is now an admin` });
 });
 
@@ -254,8 +340,13 @@ app.post('/api/refresh-token', (req, res) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid refresh token' });
     }
+    
+    const session = userSessions.get(user.userId);
+    if (!session || session.sessionId !== user.sessionId) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
 
-    const newAccessToken = jwt.sign({ userId: user.userId, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+    const newAccessToken = jwt.sign({ userId: user.userId, username: user.username, role: user.role, sessionId: user.sessionId }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ accessToken: newAccessToken });
   });
 });
@@ -266,7 +357,7 @@ app.post('/api/logout', authenticateToken, (req, res) => {
 
 app.get('/api/users/search', authenticateToken, (req, res) => {
   const { q } = req.query;
-  if (!q) {
+  if (!q || q.length < 2) {
     return res.json([]);
   }
 
@@ -280,7 +371,7 @@ app.get('/api/users/search', authenticateToken, (req, res) => {
           results.push({ id: user.id, username: user.username });
         }
       }
-      if (results.length >= 10) break;
+      if (results.length >= 5) break;
     }
   }
   res.json(results);
@@ -320,6 +411,7 @@ app.post('/api/friends/request', authenticateToken, (req, res) => {
   });
 
   friendRequests.set(friendId, existingRequests);
+  saveData();
 
   if (friend.socketId) {
     io.to(friend.socketId).emit('friend-request', {
@@ -370,6 +462,7 @@ app.post('/api/friends/accept', authenticateToken, (req, res) => {
 
   users.set(userId, user);
   users.set(friendId, friend);
+  saveData();
 
   if (friend.socketId) {
     io.to(friend.socketId).emit('friend-request-accepted', {
@@ -391,6 +484,7 @@ app.post('/api/friends/decline', authenticateToken, (req, res) => {
   if (requestIndex !== -1) {
     requests.splice(requestIndex, 1);
     friendRequests.set(userId, requests);
+    saveData();
   }
 
   res.json({ message: 'Friend request declined' });
@@ -473,6 +567,7 @@ io.on('connection', (socket) => {
       messages.set(chatKey, []);
     }
     messages.get(chatKey).push(message);
+    saveData();
 
     const receiver = users.get(receiverId);
     if (receiver && receiver.socketId) {
@@ -516,6 +611,7 @@ io.on('connection', (socket) => {
         user.online = false;
         user.socketId = null;
         users.set(socket.userId, user);
+        saveData();
 
         user.friends.forEach(friendId => {
           const friend = users.get(friendId);
@@ -531,6 +627,8 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
   });
 });
+
+loadData();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
