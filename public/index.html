@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
-    <title>Mychat - With Video Calls</title>
+    <title>Mychat No0ne</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <style>
@@ -609,7 +609,7 @@
                     <div class="username" id="currentUsername">User</div>
                     <div class="status" id="onlineStatus">● Online</div>
                 </div>
-                <button class="logout-btn" onclick="logout()">🚪</button>
+                <button class="logout-btn" onclick="logout()">Log out</button>
             </div>
             <div class="friends-section">
                 <button class="add-friend-btn" onclick="toggleSearch()">+ Add Friend</button>
@@ -643,9 +643,9 @@
         <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
         <video id="localVideo" class="local-video" autoplay playsinline muted></video>
         <div class="call-controls">
-            <button id="toggleMuteBtn" onclick="toggleMute()">🔇 Mute</button>
-            <button id="toggleVideoBtn" onclick="toggleVideo()">📹 Video Off</button>
-            <button id="endCallBtn" class="end-call" onclick="endCall()">🔴 End Call</button>
+            <button id="toggleMuteBtn" onclick="toggleMute()">Mute</button>
+            <button id="toggleVideoBtn" onclick="toggleVideo()">Camera Off</button>
+            <button id="endCallBtn" class="end-call" onclick="endCall()">End</button>
         </div>
     </div>
 
@@ -667,7 +667,7 @@
         let typingTimeout = null;
         let pendingRequestsList = [];
         
-        // Video call variables
+        
         let peer = null;
         let currentCall = null;
         let localStream = null;
@@ -675,7 +675,6 @@
         let isVideoOff = false;
         let incomingCallData = null;
 
-        // Initialize PeerJS for video calls
         function initPeer() {
             peer = new Peer(currentUser.id, {
                 config: {
@@ -788,7 +787,7 @@
                 if (audioTrack) {
                     audioTrack.enabled = !audioTrack.enabled;
                     isMuted = !audioTrack.enabled;
-                    document.getElementById('toggleMuteBtn').textContent = isMuted ? '🔊 Unmute' : '🔇 Mute';
+                    document.getElementById('toggleMuteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
                 }
             }
         }
@@ -799,7 +798,7 @@
                 if (videoTrack) {
                     videoTrack.enabled = !videoTrack.enabled;
                     isVideoOff = !videoTrack.enabled;
-                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Video On' : '📹 Video Off';
+                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? ' Camera On' : ' Camera Off';
                 }
             }
         }
