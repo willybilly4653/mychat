@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatHub - Real-time Messenger</title>
+    <title>Mychat</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <style>
         * {
@@ -507,7 +507,7 @@
                     <div class="username" id="currentUsername">User</div>
                     <div class="status" id="onlineStatus">● Online</div>
                 </div>
-                <button class="logout-btn" onclick="logout()">🚪</button>
+                <button class="logout-btn" onclick="logout()"></button>
             </div>
             <div class="friends-section">
                 <button class="add-friend-btn" onclick="toggleSearch()">+ Add Friend</button>
@@ -976,14 +976,12 @@
                 if (!currentChatFriend) showToast('Select a friend first', 'warning');
                 return;
             }
-            if (containsProfanity(text)) {
-                showToast('Message contains inappropriate language', 'error');
-                return;
-            }
+            
             if (containsEmoji(text)) {
                 showToast('Emojis are not allowed in messages', 'error');
                 return;
             }
+            
             socket.emit('send-message', { receiverId: currentChatFriend.id, text: text, tempId: Date.now().toString() });
             input.value = '';
             input.style.height = 'auto';
