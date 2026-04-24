@@ -21,6 +21,7 @@
             --text-dim: #888;
             --border: #2a2a3e;
             --success: #10b981;
+            --warning: #f59e0b;
         }
 
         body {
@@ -31,7 +32,6 @@
             overflow: hidden;
         }
 
-        /* Auth styles */
         .auth-container {
             position: fixed;
             inset: 0;
@@ -106,12 +106,6 @@
             box-shadow: 0 5px 15px rgba(233, 69, 96, 0.3);
         }
 
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: var(--text);
-            margin-top: 10px;
-        }
-
         .error-msg {
             color: #ef4444;
             font-size: 12px;
@@ -135,7 +129,6 @@
             cursor: pointer;
         }
 
-        /* Main app */
         .app-container {
             display: none;
             height: 100vh;
@@ -206,6 +199,11 @@
             text-transform: uppercase;
             color: var(--text-dim);
             margin-bottom: 15px;
+            margin-top: 20px;
+        }
+
+        .section-title:first-of-type {
+            margin-top: 0;
         }
 
         .add-friend-btn {
@@ -239,10 +237,23 @@
             padding: 8px;
             cursor: pointer;
             border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .search-result-item:hover {
             background: rgba(255,255,255,0.1);
+        }
+
+        .add-friend-small {
+            background: var(--accent);
+            border: none;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
         }
 
         .friends-list {
@@ -298,10 +309,47 @@
             color: var(--success);
         }
 
-        .typing-indicator {
-            font-size: 11px;
-            color: var(--accent);
-            font-style: italic;
+        .request-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: 12px;
+            margin-bottom: 8px;
+            border: 1px solid var(--warning);
+        }
+
+        .request-info {
+            flex: 1;
+        }
+
+        .request-username {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .request-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .accept-btn, .decline-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .accept-btn {
+            background: var(--success);
+            color: white;
+        }
+
+        .decline-btn {
+            background: #ef4444;
+            color: white;
         }
 
         .chat-area {
@@ -409,43 +457,6 @@
             padding: 40px;
         }
 
-        .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(10px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-        }
-
-        .modal.show {
-            display: flex;
-        }
-
-        .modal-content {
-            background: var(--primary-light);
-            border-radius: 24px;
-            padding: 30px;
-            width: 90%;
-            max-width: 400px;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 20px;
-        }
-
-        .modal-buttons button {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-        }
-
         @media (max-width: 768px) {
             .sidebar {
                 width: 80px;
@@ -462,7 +473,7 @@
             <h2 id="authTitle">Create Account</h2>
             <div id="loginForm" style="display: none;">
                 <div class="input-group">
-                    <input type="text" id="loginUsername" placeholder="Username">
+                    <input type="text" id="loginUsername" placeholder="Username (max 20 chars)" maxlength="20">
                 </div>
                 <div class="input-group">
                     <input type="password" id="loginPassword" placeholder="Password">
@@ -473,7 +484,7 @@
             </div>
             <div id="registerForm">
                 <div class="input-group">
-                    <input type="text" id="regUsername" placeholder="Username">
+                    <input type="text" id="regUsername" placeholder="Username (max 20 chars, no profanity)" maxlength="20">
                 </div>
                 <div class="input-group">
                     <input type="password" id="regPassword" placeholder="Password (min 8 characters)">
@@ -504,6 +515,8 @@
                     <input type="text" id="searchInput" class="search-input" placeholder="Search users..." oninput="searchUsers()">
                     <div id="searchResults" class="search-results"></div>
                 </div>
+                <div class="section-title">FRIEND REQUESTS</div>
+                <div id="requestsList" class="friends-list"></div>
                 <div class="section-title">FRIENDS</div>
                 <div class="friends-list" id="friendsList"></div>
             </div>
@@ -514,7 +527,7 @@
                 <div id="typingStatus" style="font-size: 12px; color: #e94560; margin-top: 5px;"></div>
             </div>
             <div class="messages-container" id="messagesContainer">
-                <div class="empty-chat">👋 Click on a friend to start messaging</div>
+                <div class="empty-chat">Click on a friend to start messaging</div>
             </div>
             <div class="message-input-area">
                 <textarea class="message-input" id="messageInput" placeholder="Type a message..." rows="1" onkeypress="handleKeyPress(event)" oninput="handleTyping()"></textarea>
@@ -523,6 +536,527 @@
         </div>
     </div>
 
-    <script src="/app.js"></script>
+    <script>
+        const API_URL = '';
+        let socket = null;
+        let currentUser = null;
+        let currentChatFriend = null;
+        let accessToken = null;
+        let refreshToken = null;
+        let typingTimeout = null;
+        let pendingRequestsList = [];
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#f59e0b'};
+                color: white;
+                padding: 12px 24px;
+                border-radius: 12px;
+                font-size: 14px;
+                z-index: 3000;
+                animation: slideUp 0.3s ease;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        function containsProfanity(text) {
+            const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
+            const lowerText = text.toLowerCase();
+            return badWords.some(word => lowerText.includes(word));
+        }
+
+        function containsEmoji(text) {
+            const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/u;
+            return emojiRegex.test(text);
+        }
+
+        async function fetchWithAuth(url, options = {}) {
+            if (!accessToken) throw new Error('No access token');
+            options.headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            };
+            let response = await fetch(url, options);
+            if (response.status === 403) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    options.headers['Authorization'] = `Bearer ${accessToken}`;
+                    response = await fetch(url, options);
+                } else {
+                    logout();
+                    throw new Error('Session expired');
+                }
+            }
+            return response;
+        }
+
+        async function refreshAccessToken() {
+            try {
+                const response = await fetch(`${API_URL}/api/refresh-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    accessToken = data.accessToken;
+                    localStorage.setItem('accessToken', accessToken);
+                    return true;
+                }
+            } catch (error) {
+                console.error('Token refresh failed:', error);
+            }
+            return false;
+        }
+
+        async function handleRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('regConfirm').value;
+            const errorEl = document.getElementById('regError');
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please fill all fields';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (username.length > 20) {
+                errorEl.textContent = 'Username must be 20 characters or less';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (username.length < 3) {
+                errorEl.textContent = 'Username must be at least 3 characters';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (containsProfanity(username)) {
+                errorEl.textContent = 'Username contains inappropriate language';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (containsEmoji(username)) {
+                errorEl.textContent = 'Username cannot contain emojis';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (password !== confirm) {
+                errorEl.textContent = 'Passwords do not match';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (password.length < 8) {
+                errorEl.textContent = 'Password must be at least 8 characters';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    accessToken = data.accessToken;
+                    refreshToken = data.refreshToken;
+                    localStorage.setItem('accessToken', accessToken);
+                    localStorage.setItem('refreshToken', refreshToken);
+                    currentUser = data.user;
+                    showToast('Account created successfully!', 'success');
+                    showApp();
+                } else {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.add('show');
+                }
+            } catch (error) {
+                errorEl.textContent = 'Server error. Please try again.';
+                errorEl.classList.add('show');
+            }
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorEl = document.getElementById('loginError');
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please enter username and password';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    accessToken = data.accessToken;
+                    refreshToken = data.refreshToken;
+                    localStorage.setItem('accessToken', accessToken);
+                    localStorage.setItem('refreshToken', refreshToken);
+                    currentUser = data.user;
+                    showToast('Logged in successfully!', 'success');
+                    showApp();
+                } else {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.add('show');
+                }
+            } catch (error) {
+                errorEl.textContent = 'Server error. Please try again.';
+                errorEl.classList.add('show');
+            }
+        }
+
+        function showRegister() {
+            document.getElementById('authTitle').textContent = 'Create Account';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('regError').classList.remove('show');
+        }
+
+        function showLogin() {
+            document.getElementById('authTitle').textContent = 'Welcome Back';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('loginError').classList.remove('show');
+        }
+
+        async function logout() {
+            if (accessToken) {
+                await fetch(`${API_URL}/api/logout`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                }).catch(() => {});
+            }
+            if (socket) socket.disconnect();
+            currentUser = null;
+            currentChatFriend = null;
+            accessToken = null;
+            refreshToken = null;
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            document.getElementById('authContainer').classList.remove('hidden');
+            document.getElementById('appContainer').classList.remove('visible');
+            showLogin();
+            showToast('Logged out', 'info');
+        }
+
+        function initSocket() {
+            socket = io();
+            socket.on('connect', () => {
+                console.log('Socket connected');
+                socket.emit('user-online', accessToken);
+            });
+            socket.on('new-message', (message) => {
+                if (currentChatFriend && (message.senderId === currentChatFriend.id || message.receiverId === currentChatFriend.id)) {
+                    loadMessages();
+                }
+            });
+            socket.on('message-sent', (message) => {
+                loadMessages();
+            });
+            socket.on('user-typing', (data) => {
+                if (currentChatFriend && data.userId === currentChatFriend.id) {
+                    const typingStatus = document.getElementById('typingStatus');
+                    typingStatus.textContent = data.isTyping ? `${currentChatFriend.username} is typing...` : '';
+                }
+            });
+            socket.on('friend-request', (data) => {
+                showToast(`${data.fromUsername} sent you a friend request!`, 'info');
+                loadPendingRequests();
+            });
+            socket.on('friend-request-accepted', (data) => {
+                showToast(`${data.fromUsername} accepted your friend request!`, 'success');
+                loadFriends();
+                loadPendingRequests();
+            });
+            socket.on('friend-status-change', (data) => {
+                loadFriends();
+                if (currentChatFriend && currentChatFriend.id === data.friendId) {
+                    const statusEl = document.querySelector('.friend-status');
+                    if (statusEl) {
+                        statusEl.textContent = data.online ? 'Online' : 'Offline';
+                        statusEl.className = `friend-status ${data.online ? 'online' : ''}`;
+                    }
+                }
+            });
+        }
+
+        function handleTyping() {
+            if (!socket || !currentChatFriend) return;
+            socket.emit('typing', { receiverId: currentChatFriend.id, isTyping: true });
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit('typing', { receiverId: currentChatFriend.id, isTyping: false });
+            }, 1000);
+        }
+
+        let searchTimeout = null;
+        async function searchUsers() {
+            const query = document.getElementById('searchInput').value.trim();
+            const resultsDiv = document.getElementById('searchResults');
+            if (!query) { resultsDiv.innerHTML = ''; return; }
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetchWithAuth(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`);
+                    const users = await response.json();
+                    resultsDiv.innerHTML = users.map(user => `
+                        <div class="search-result-item">
+                            <span>${escapeHtml(user.username)}</span>
+                            <button class="add-friend-small" onclick="sendFriendRequest('${user.id}', '${escapeHtml(user.username)}')">Add</button>
+                        </div>
+                    `).join('');
+                } catch (error) { console.error('Search failed:', error); }
+            }, 300);
+        }
+
+        async function sendFriendRequest(friendId, friendName) {
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/friends/request`, {
+                    method: 'POST',
+                    body: JSON.stringify({ friendId })
+                });
+                if (response.ok) {
+                    showToast(`Friend request sent to ${friendName}!`, 'success');
+                    document.getElementById('searchInput').value = '';
+                    document.getElementById('searchResults').innerHTML = '';
+                    document.getElementById('searchSection').style.display = 'none';
+                } else {
+                    const data = await response.json();
+                    showToast(data.error, 'error');
+                }
+            } catch (error) {
+                showToast('Failed to send request', 'error');
+            }
+        }
+
+        async function loadPendingRequests() {
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/friends/requests`);
+                const requests = await response.json();
+                pendingRequestsList = requests;
+                const requestsList = document.getElementById('requestsList');
+                if (requests.length === 0) {
+                    requestsList.innerHTML = '<div style="text-align: center; color: #888; padding: 10px;">No pending requests</div>';
+                    return;
+                }
+                requestsList.innerHTML = requests.map(req => `
+                    <div class="request-item">
+                        <div class="request-info">
+                            <div class="request-username">${escapeHtml(req.fromUsername)}</div>
+                        </div>
+                        <div class="request-actions">
+                            <button class="accept-btn" onclick="acceptRequest('${req.fromId}')">Accept</button>
+                            <button class="decline-btn" onclick="declineRequest('${req.fromId}')">Decline</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) { console.error('Failed to load requests:', error); }
+        }
+
+        async function acceptRequest(friendId) {
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/friends/accept`, {
+                    method: 'POST',
+                    body: JSON.stringify({ friendId })
+                });
+                if (response.ok) {
+                    showToast('Friend request accepted!', 'success');
+                    await loadFriends();
+                    await loadPendingRequests();
+                    if (socket) {
+                        socket.emit('friend-request-accepted', { friendId });
+                    }
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
+                }
+            } catch (error) {
+                showToast('Failed to accept request', 'error');
+            }
+        }
+
+        async function declineRequest(friendId) {
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/friends/decline`, {
+                    method: 'POST',
+                    body: JSON.stringify({ friendId })
+                });
+                if (response.ok) {
+                    showToast('Friend request declined', 'info');
+                    await loadPendingRequests();
+                }
+            } catch (error) {
+                showToast('Failed to decline request', 'error');
+            }
+        }
+
+        async function loadFriends() {
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/friends/list`);
+                const friends = await response.json();
+                const friendsList = document.getElementById('friendsList');
+                if (friends.length === 0) {
+                    friendsList.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No friends yet<br>Add friends to start chatting!</div>';
+                    return;
+                }
+                friendsList.innerHTML = friends.map(friend => `
+                    <div class="friend-item ${currentChatFriend && currentChatFriend.id === friend.id ? 'active' : ''}" onclick="selectFriend('${friend.id}', '${escapeHtml(friend.username)}')">
+                        <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+                        <div class="friend-info">
+                            <div class="friend-name">${escapeHtml(friend.username)}</div>
+                            <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) { console.error('Failed to load friends:', error); }
+        }
+
+        function toggleSearch() {
+            const searchSection = document.getElementById('searchSection');
+            searchSection.style.display = searchSection.style.display === 'none' ? 'block' : 'none';
+            if (searchSection.style.display === 'block') {
+                document.getElementById('searchInput').focus();
+            }
+        }
+
+        async function selectFriend(friendId, friendName) {
+            currentChatFriend = { id: friendId, username: friendName };
+            document.getElementById('chatWith').textContent = `Chat with ${friendName}`;
+            document.getElementById('typingStatus').textContent = '';
+            await loadMessages();
+            loadFriends();
+            document.getElementById('messageInput').focus();
+        }
+
+        async function loadMessages() {
+            if (!currentChatFriend) return;
+            try {
+                const response = await fetchWithAuth(`${API_URL}/api/messages/${currentChatFriend.id}`);
+                const messages = await response.json();
+                const container = document.getElementById('messagesContainer');
+                if (messages.length === 0) {
+                    container.innerHTML = '<div class="empty-chat">No messages yet<br>Send a message to start the conversation!</div>';
+                    return;
+                }
+                container.innerHTML = messages.map(msg => `
+                    <div class="message ${msg.senderId === currentUser.id ? 'sent' : 'received'}">
+                        <div class="message-bubble">${escapeHtml(msg.text)}</div>
+                        <div class="message-time">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                `).join('');
+                container.scrollTop = container.scrollHeight;
+            } catch (error) { console.error('Failed to load messages:', error); }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text || !currentChatFriend || !socket) {
+                if (!currentChatFriend) showToast('Select a friend first', 'warning');
+                return;
+            }
+            if (containsProfanity(text)) {
+                showToast('Message contains inappropriate language', 'error');
+                return;
+            }
+            if (containsEmoji(text)) {
+                showToast('Emojis are not allowed in messages', 'error');
+                return;
+            }
+            socket.emit('send-message', { receiverId: currentChatFriend.id, text: text, tempId: Date.now().toString() });
+            input.value = '';
+            input.style.height = 'auto';
+            clearTimeout(typingTimeout);
+            if (typingTimeout) socket.emit('typing', { receiverId: currentChatFriend.id, isTyping: false });
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.getElementById('messageInput')?.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+        });
+
+        async function showApp() {
+            document.getElementById('authContainer').classList.add('hidden');
+            document.getElementById('appContainer').classList.add('visible');
+            document.getElementById('currentUsername').textContent = currentUser.username;
+            document.getElementById('userAvatar').textContent = currentUser.username.charAt(0).toUpperCase();
+            await loadFriends();
+            await loadPendingRequests();
+            initSocket();
+        }
+
+        const savedAccessToken = localStorage.getItem('accessToken');
+        if (savedAccessToken) {
+            accessToken = savedAccessToken;
+            refreshToken = localStorage.getItem('refreshToken');
+            fetchWithAuth(`${API_URL}/api/friends/list`).then(async (response) => {
+                if (response.ok) {
+                    const userResponse = await fetchWithAuth(`${API_URL}/api/user`).catch(() => null);
+                    if (userResponse && userResponse.ok) {
+                        const userData = await userResponse.json();
+                        currentUser = userData;
+                        showApp();
+                    } else {
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('refreshToken');
+                        showLogin();
+                    }
+                } else {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    showLogin();
+                }
+            }).catch(() => {
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                showLogin();
+            });
+        } else {
+            showLogin();
+        }
+
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>
