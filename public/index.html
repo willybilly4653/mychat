@@ -672,21 +672,21 @@
             <h2 id="authTitle">Create Account</h2>
             <div id="loginForm" style="display: none;">
                 <div class="input-group">
-                    <input type="text" id="loginUsername" placeholder="Username (max 20 chars)" maxlength="20">
+                    <input type="text" id="loginUsername" placeholder="Username max 20 chars" maxlength="20">
                 </div>
                 <div class="input-group">
                     <input type="password" id="loginPassword" placeholder="Password">
                 </div>
                 <div class="error-msg" id="loginError"></div>
                 <button class="btn btn-primary" onclick="handleLogin()">Login</button>
-                <div class="toggle-auth">Don't have an account? <a onclick="showRegister()">Sign up</a></div>
+                <div class="toggle-auth">Dont have an account? <a onclick="showRegister()">Sign up</a></div>
             </div>
             <div id="registerForm">
                 <div class="input-group">
-                    <input type="text" id="regUsername" placeholder="Username (max 20 chars, no profanity)" maxlength="20">
+                    <input type="text" id="regUsername" placeholder="Username max 20 chars no profanity" maxlength="20">
                 </div>
                 <div class="input-group">
-                    <input type="password" id="regPassword" placeholder="Password (min 8 characters)">
+                    <input type="password" id="regPassword" placeholder="Password min 8 characters">
                 </div>
                 <div class="input-group">
                     <input type="password" id="regConfirm" placeholder="Confirm Password">
@@ -730,7 +730,7 @@
             </div>
             <div class="message-input-area">
                 <textarea class="message-input" id="messageInput" placeholder="Type a message..." rows="1" onkeypress="handleKeyPress(event)" oninput="handleTyping()"></textarea>
-                <button class="send-btn" onclick="sendMessage()">➤</button>
+                <button class="send-btn" onclick="sendMessage()">SEND</button>
             </div>
         </div>
     </div>
@@ -743,11 +743,11 @@
         
         <div id="callStatusBadges" class="call-status-badge">
             <div id="muteBadge" class="status-badge" style="display: none;">
-                <span class="status-icon">🎤</span>
+                <span class="status-icon">MIC</span>
                 <span>Muted</span>
             </div>
             <div id="cameraBadge" class="status-badge" style="display: none;">
-                <span class="status-icon">📷</span>
+                <span class="status-icon">CAM</span>
                 <span>Camera Off</span>
             </div>
         </div>
@@ -758,9 +758,9 @@
         </div>
         
         <div class="call-controls">
-            <button id="toggleMuteBtn" onclick="toggleMute()">🔇 Mute</button>
-            <button id="toggleVideoBtn" onclick="toggleVideo()">📹 Camera Off</button>
-            <button id="endCallBtn" class="end-call" onclick="endCall()">🔴 End</button>
+            <button id="toggleMuteBtn" onclick="toggleMute()">Mute</button>
+            <button id="toggleVideoBtn" onclick="toggleVideo()">Camera Off</button>
+            <button id="endCallBtn" class="end-call" onclick="endCall()">End</button>
         </div>
     </div>
 
@@ -772,7 +772,7 @@
         </div>
     </div>
 
-    <audio id="messageSound" src="/text.mp3" preload="auto"></audio>
+    <audio id="messageSound" src="/text.wav" preload="auto"></audio>
     <audio id="callSound" src="/call.mp3" preload="auto" loop></audio>
 
     <script>
@@ -899,7 +899,7 @@
                 localAvatar.style.display = 'none';
             }
             
-            if (currentCall && !currentCall._remoteStream) {
+            if (currentCall && (!currentCall._remoteStream || isVideoOff)) {
                 remoteVideo.style.display = 'none';
                 remoteAvatar.style.display = 'flex';
                 if (currentChatFriend) {
@@ -918,11 +918,13 @@
             document.getElementById('callingStatus').style.display = 'block';
             
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 if (localStream) {
-                    const videoTrack = localStream.getVideoTracks()[0];
-                    if (videoTrack && isVideoOff) {
-                        videoTrack.enabled = false;
+                    if (isVideoOff) {
+                        const videoTrack = localStream.getVideoTracks()[0];
+                        if (videoTrack) {
+                            videoTrack.enabled = false;
+                        }
                     }
                 }
                 document.getElementById('localVideo').srcObject = localStream;
@@ -949,7 +951,7 @@
                 showToast('Calling ' + friendName + '...', 'info');
             } catch (err) {
                 console.error('Camera error:', err);
-                showToast('Cannot access camera/microphone', 'error');
+                showToast('Cannot access camera or microphone. Please check permissions.', 'error');
                 isCalling = false;
                 document.getElementById('callingStatus').style.display = 'none';
                 endCall();
@@ -963,11 +965,13 @@
             stopCallRingtone();
             
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 if (localStream) {
-                    const videoTrack = localStream.getVideoTracks()[0];
-                    if (videoTrack && isVideoOff) {
-                        videoTrack.enabled = false;
+                    if (isVideoOff) {
+                        const videoTrack = localStream.getVideoTracks()[0];
+                        if (videoTrack) {
+                            videoTrack.enabled = false;
+                        }
                     }
                 }
                 document.getElementById('localVideo').srcObject = localStream;
@@ -989,7 +993,7 @@
                 incomingCallData = null;
             } catch (err) {
                 console.error('Camera error:', err);
-                showToast('Cannot access camera/microphone', 'error');
+                showToast('Cannot access camera or microphone. Please check permissions.', 'error');
                 endCall();
             }
         }
@@ -1023,8 +1027,8 @@
             document.getElementById('remoteAvatar').style.display = 'flex';
             isMuted = false;
             isVideoOff = true;
-            document.getElementById('toggleMuteBtn').textContent = '🔇 Mute';
-            document.getElementById('toggleVideoBtn').textContent = '📹 Camera Off';
+            document.getElementById('toggleMuteBtn').textContent = 'Mute';
+            document.getElementById('toggleVideoBtn').textContent = 'Camera Off';
             updateCallBadges();
         }
 
@@ -1034,7 +1038,7 @@
                 if (audioTrack) {
                     audioTrack.enabled = !audioTrack.enabled;
                     isMuted = !audioTrack.enabled;
-                    document.getElementById('toggleMuteBtn').textContent = isMuted ? '🔊 Unmute' : '🔇 Mute';
+                    document.getElementById('toggleMuteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
                     updateCallBadges();
                 }
             }
@@ -1046,17 +1050,17 @@
                 if (videoTrack) {
                     videoTrack.enabled = !videoTrack.enabled;
                     isVideoOff = !videoTrack.enabled;
-                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Camera On' : '📹 Camera Off';
+                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
                     updateCallUI();
                 }
             } else {
                 isVideoOff = !isVideoOff;
-                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? '📹 Camera On' : '📹 Camera Off';
+                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
                 updateCallUI();
             }
         }
 
-        function showToast(message, type = 'info') {
+        function showToast(message, type) {
             const toast = document.createElement('div');
             toast.style.cssText = `
                 position: fixed;
@@ -1435,7 +1439,7 @@
                 const friends = await response.json();
                 const friendsList = document.getElementById('friendsList');
                 if (friends.length === 0) {
-                    friendsList.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No friends yet<br>Add friends to start chatting!</div>';
+                    friendsList.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No friends yet<br>Add friends to start chatting</div>';
                     return;
                 }
                 friendsList.innerHTML = friends.map(friend => `
@@ -1445,7 +1449,7 @@
                             <div class="friend-name">${escapeHtml(friend.username)}</div>
                             <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
                         </div>
-                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">📞 Video Call</button>
+                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
                     </div>
                 `).join('');
             } catch (error) { console.error('Failed to load friends:', error); }
@@ -1475,7 +1479,7 @@
                 const messages = await response.json();
                 const container = document.getElementById('messagesContainer');
                 if (messages.length === 0) {
-                    container.innerHTML = '<div class="empty-chat">No messages yet<br>Send a message to start the conversation!</div>';
+                    container.innerHTML = '<div class="empty-chat">No messages yet<br>Send a message to start the conversation</div>';
                     return;
                 }
                 container.innerHTML = messages.map(msg => `
