@@ -473,7 +473,6 @@
             padding: 40px;
         }
 
-        /* Video Call Modal */
         .call-container {
             position: fixed;
             top: 0;
@@ -496,6 +495,23 @@
             object-fit: cover;
         }
 
+        .remote-avatar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(135deg, var(--accent), var(--primary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 80px;
+            font-weight: bold;
+            color: white;
+        }
+
         .local-video {
             position: absolute;
             bottom: 20px;
@@ -504,6 +520,23 @@
             border-radius: 10px;
             border: 2px solid white;
             cursor: pointer;
+        }
+
+        .local-avatar {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, var(--accent), var(--primary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            border: 2px solid white;
         }
 
         .call-controls {
@@ -563,8 +596,15 @@
             .user-details, .friend-info .friend-status, .friend-name {
                 display: none;
             }
-            .local-video {
+            .local-video, .local-avatar {
                 width: 80px;
+                height: 80px;
+                font-size: 32px;
+            }
+            .remote-avatar {
+                width: 120px;
+                height: 120px;
+                font-size: 48px;
             }
         }
     </style>
@@ -607,7 +647,7 @@
                 <div class="avatar" id="userAvatar">U</div>
                 <div class="user-details">
                     <div class="username" id="currentUsername">User</div>
-                    <div class="status" id="onlineStatus">● Online</div>
+                    <div class="status" id="onlineStatus">Online</div>
                 </div>
                 <button class="logout-btn" onclick="logout()">Log out</button>
             </div>
@@ -638,10 +678,11 @@
         </div>
     </div>
 
-    <!-- Video Call UI -->
     <div id="callContainer" class="call-container">
-        <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
-        <video id="localVideo" class="local-video" autoplay playsinline muted></video>
+        <video id="remoteVideo" class="remote-video" autoplay playsinline style="display: none;"></video>
+        <div id="remoteAvatar" class="remote-avatar"></div>
+        <video id="localVideo" class="local-video" autoplay playsinline muted style="display: none;"></video>
+        <div id="localAvatar" class="local-avatar"></div>
         <div class="call-controls">
             <button id="toggleMuteBtn" onclick="toggleMute()">Mute</button>
             <button id="toggleVideoBtn" onclick="toggleVideo()">Camera Off</button>
@@ -657,6 +698,9 @@
         </div>
     </div>
 
+    <audio id="messageSound" src="/text.mp3" preload="auto"></audio>
+    <audio id="callSound" src="/call.mp3" preload="auto" loop></audio>
+
     <script>
         const API_URL = '';
         let socket = null;
@@ -667,13 +711,56 @@
         let typingTimeout = null;
         let pendingRequestsList = [];
         
-        
         let peer = null;
         let currentCall = null;
         let localStream = null;
         let isMuted = false;
-        let isVideoOff = false;
+        let isVideoOff = true;
         let incomingCallData = null;
+        let callRingtone = null;
+        let callRingtoneTimeout = null;
+
+        function playMessageSound() {
+            const audio = document.getElementById('messageSound');
+            if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(e => console.log('Audio play failed:', e));
+                setTimeout(() => {
+                    if (audio) audio.pause();
+                }, 2000);
+            }
+        }
+
+        function startCallRingtone() {
+            const audio = document.getElementById('callSound');
+            if (audio) {
+                callRingtone = audio;
+                audio.currentTime = 0;
+                audio.loop = true;
+                audio.play().catch(e => console.log('Ringtone play failed:', e));
+                callRingtoneTimeout = setTimeout(() => {
+                    if (callRingtone) {
+                        callRingtone.pause();
+                        callRingtone.currentTime = 0;
+                    }
+                    if (incomingCallData) {
+                        rejectCall();
+                    }
+                }, 30000);
+            }
+        }
+
+        function stopCallRingtone() {
+            if (callRingtone) {
+                callRingtone.pause();
+                callRingtone.currentTime = 0;
+                callRingtone = null;
+            }
+            if (callRingtoneTimeout) {
+                clearTimeout(callRingtoneTimeout);
+                callRingtoneTimeout = null;
+            }
+        }
 
         function initPeer() {
             peer = new Peer(currentUser.id, {
@@ -692,8 +779,9 @@
             
             peer.on('call', (call) => {
                 incomingCallData = call;
-                document.getElementById('callerName').textContent = `${call.metadata?.fromName} is calling you!`;
+                document.getElementById('callerName').textContent = call.metadata?.fromName + ' is calling you!';
                 document.getElementById('incomingCall').classList.add('show');
+                startCallRingtone();
             });
             
             peer.on('error', (err) => {
@@ -702,18 +790,57 @@
             });
         }
 
+        function updateCallUI() {
+            const remoteVideo = document.getElementById('remoteVideo');
+            const remoteAvatar = document.getElementById('remoteAvatar');
+            const localVideo = document.getElementById('localVideo');
+            const localAvatar = document.getElementById('localAvatar');
+            const friend = users.find(u => u.id === currentChatFriend?.id);
+            
+            if (isVideoOff || !localStream) {
+                localVideo.style.display = 'none';
+                localAvatar.style.display = 'flex';
+                if (currentUser) {
+                    localAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+                }
+            } else {
+                localVideo.style.display = 'block';
+                localAvatar.style.display = 'none';
+            }
+            
+            if (currentCall && (!currentCall._remoteStream || isVideoOff)) {
+                remoteVideo.style.display = 'none';
+                remoteAvatar.style.display = 'flex';
+                if (currentChatFriend) {
+                    remoteAvatar.textContent = currentChatFriend.username.charAt(0).toUpperCase();
+                }
+            } else if (currentCall && currentCall._remoteStream) {
+                remoteVideo.style.display = 'block';
+                remoteAvatar.style.display = 'none';
+            }
+        }
+
         async function startVideoCall(friendId, friendName) {
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
+                if (localStream) {
+                    const videoTrack = localStream.getVideoTracks()[0];
+                    if (videoTrack && isVideoOff) {
+                        videoTrack.enabled = false;
+                    }
+                }
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('callContainer').classList.add('active');
+                updateCallUI();
                 
                 const call = peer.call(friendId, localStream, {
                     metadata: { fromName: currentUser.username }
                 });
                 
                 call.on('stream', (remoteStream) => {
+                    currentCall._remoteStream = remoteStream;
                     document.getElementById('remoteVideo').srcObject = remoteStream;
+                    updateCallUI();
                 });
                 
                 call.on('close', () => {
@@ -721,7 +848,7 @@
                 });
                 
                 currentCall = call;
-                showToast(`Calling ${friendName}...`, 'info');
+                showToast('Calling ' + friendName + '...', 'info');
             } catch (err) {
                 console.error('Camera error:', err);
                 showToast('Cannot access camera/microphone', 'error');
@@ -732,14 +859,25 @@
             const call = incomingCallData;
             if (!call) return;
             
+            stopCallRingtone();
+            
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: !isVideoOff, audio: true });
+                if (localStream) {
+                    const videoTrack = localStream.getVideoTracks()[0];
+                    if (videoTrack && isVideoOff) {
+                        videoTrack.enabled = false;
+                    }
+                }
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('callContainer').classList.add('active');
+                updateCallUI();
                 
                 call.answer(localStream);
                 call.on('stream', (remoteStream) => {
+                    currentCall._remoteStream = remoteStream;
                     document.getElementById('remoteVideo').srcObject = remoteStream;
+                    updateCallUI();
                 });
                 call.on('close', () => {
                     endCall();
@@ -755,6 +893,7 @@
         }
 
         function rejectCall() {
+            stopCallRingtone();
             if (incomingCallData) {
                 incomingCallData.close();
                 incomingCallData = null;
@@ -764,6 +903,7 @@
         }
 
         function endCall() {
+            stopCallRingtone();
             if (currentCall) {
                 currentCall.close();
                 currentCall = null;
@@ -775,10 +915,12 @@
             document.getElementById('callContainer').classList.remove('active');
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('localVideo').srcObject = null;
+            document.getElementById('remoteVideo').style.display = 'none';
+            document.getElementById('remoteAvatar').style.display = 'flex';
             isMuted = false;
-            isVideoOff = false;
-            document.getElementById('toggleMuteBtn').textContent = '🔇 Mute';
-            document.getElementById('toggleVideoBtn').textContent = '📹 Video Off';
+            isVideoOff = true;
+            document.getElementById('toggleMuteBtn').textContent = 'Mute';
+            document.getElementById('toggleVideoBtn').textContent = 'Camera Off';
         }
 
         function toggleMute() {
@@ -798,8 +940,13 @@
                 if (videoTrack) {
                     videoTrack.enabled = !videoTrack.enabled;
                     isVideoOff = !videoTrack.enabled;
-                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? ' Camera On' : ' Camera Off';
+                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
+                    updateCallUI();
                 }
+            } else {
+                isVideoOff = !isVideoOff;
+                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
+                updateCallUI();
             }
         }
 
@@ -1006,6 +1153,7 @@
             }
             if (socket) socket.disconnect();
             if (peer) peer.destroy();
+            stopCallRingtone();
             currentUser = null;
             currentChatFriend = null;
             accessToken = null;
@@ -1025,6 +1173,9 @@
                 socket.emit('user-online', accessToken);
             });
             socket.on('new-message', (message) => {
+                if (message.senderId !== currentUser.id) {
+                    playMessageSound();
+                }
                 if (currentChatFriend && (message.senderId === currentChatFriend.id || message.receiverId === currentChatFriend.id)) {
                     loadMessages();
                 }
@@ -1035,15 +1186,15 @@
             socket.on('user-typing', (data) => {
                 if (currentChatFriend && data.userId === currentChatFriend.id) {
                     const typingStatus = document.getElementById('typingStatus');
-                    typingStatus.textContent = data.isTyping ? `${currentChatFriend.username} is typing...` : '';
+                    typingStatus.textContent = data.isTyping ? currentChatFriend.username + ' is typing...' : '';
                 }
             });
             socket.on('friend-request', (data) => {
-                showToast(`${data.fromUsername} sent you a friend request!`, 'info');
+                showToast(data.fromUsername + ' sent you a friend request!', 'info');
                 loadPendingRequests();
             });
             socket.on('friend-request-accepted', (data) => {
-                showToast(`${data.fromUsername} accepted your friend request!`, 'success');
+                showToast(data.fromUsername + ' accepted your friend request!', 'success');
                 loadFriends();
                 loadPendingRequests();
             });
@@ -1053,7 +1204,7 @@
                     const statusEl = document.querySelector('.friend-status');
                     if (statusEl) {
                         statusEl.textContent = data.online ? 'Online' : 'Offline';
-                        statusEl.className = `friend-status ${data.online ? 'online' : ''}`;
+                        statusEl.className = 'friend-status ' + (data.online ? 'online' : '');
                     }
                 }
             });
@@ -1098,7 +1249,7 @@
                     body: JSON.stringify({ friendId })
                 });
                 if (response.ok) {
-                    showToast(`Friend request sent to ${friendName}!`, 'success');
+                    showToast('Friend request sent to ' + friendName + '!', 'success');
                     document.getElementById('searchInput').value = '';
                     document.getElementById('searchResults').innerHTML = '';
                     document.getElementById('searchSection').style.display = 'none';
@@ -1188,7 +1339,7 @@
                             <div class="friend-name">${escapeHtml(friend.username)}</div>
                             <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
                         </div>
-                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">📞 Video Call</button>
+                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
                     </div>
                 `).join('');
             } catch (error) { console.error('Failed to load friends:', error); }
@@ -1204,7 +1355,7 @@
 
         async function selectFriend(friendId, friendName) {
             currentChatFriend = { id: friendId, username: friendName };
-            document.getElementById('chatWith').textContent = `Chat with ${friendName}`;
+            document.getElementById('chatWith').textContent = 'Chat with ' + friendName;
             document.getElementById('typingStatus').textContent = '';
             await loadMessages();
             loadFriends();
