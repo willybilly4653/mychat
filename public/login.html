@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Mychat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-dark: #1a1a2e;
+            --bg-darker: #0f0f1a;
+            --primary: #0f3460;
+            --accent: #e94560;
+            --text: #eee;
+            --text-dim: #888;
+            --border: #2a2a3e;
+            --success: #10b981;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .auth-box {
+            background: rgba(22, 30, 46, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 40px;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .auth-box h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, var(--text), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #c73e56);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.3);
+        }
+
+        .error-msg {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .error-msg.show {
+            display: block;
+        }
+
+        .toggle-auth {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 13px;
+        }
+
+        .toggle-auth a {
+            color: var(--accent);
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-box">
+        <h2 id="authTitle">Welcome Back</h2>
+        <div id="loginForm">
+            <div class="input-group">
+                <input type="text" id="loginUsername" placeholder="Username (max 20 chars)" maxlength="20">
+            </div>
+            <div class="input-group">
+                <input type="password" id="loginPassword" placeholder="Password">
+            </div>
+            <div class="error-msg" id="loginError"></div>
+            <button class="btn btn-primary" onclick="handleLogin()">Login</button>
+            <div class="toggle-auth">Don't have an account? <a onclick="showRegister()">Sign up</a></div>
+        </div>
+        <div id="registerForm" style="display: none;">
+            <div class="input-group">
+                <input type="text" id="regUsername" placeholder="Username (max 20 chars, no profanity)" maxlength="20">
+            </div>
+            <div class="input-group">
+                <input type="password" id="regPassword" placeholder="Password (min 8 characters)">
+            </div>
+            <div class="input-group">
+                <input type="password" id="regConfirm" placeholder="Confirm Password">
+            </div>
+            <div class="error-msg" id="regError"></div>
+            <button class="btn btn-primary" onclick="handleRegister()">Create Account</button>
+            <div class="toggle-auth">Already have an account? <a onclick="showLogin()">Login</a></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '';
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: ${type === 'success' ? '#10b981' : '#ef4444'};
+                color: white;
+                padding: 12px 24px;
+                border-radius: 12px;
+                font-size: 14px;
+                z-index: 3000;
+                animation: slideUp 0.3s ease;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        function containsProfanity(text) {
+            const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
+            const lowerText = text.toLowerCase();
+            return badWords.some(word => lowerText.includes(word));
+        }
+
+        function containsEmoji(text) {
+            const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/u;
+            return emojiRegex.test(text);
+        }
+
+        async function handleRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirm = document.getElementById('regConfirm').value;
+            const errorEl = document.getElementById('regError');
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please fill all fields';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (username.length > 20) {
+                errorEl.textContent = 'Username must be 20 characters or less';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (username.length < 3) {
+                errorEl.textContent = 'Username must be at least 3 characters';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (containsProfanity(username)) {
+                errorEl.textContent = 'Username contains inappropriate language';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (containsEmoji(username)) {
+                errorEl.textContent = 'Username cannot contain emojis';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (password !== confirm) {
+                errorEl.textContent = 'Passwords do not match';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            if (password.length < 8) {
+                errorEl.textContent = 'Password must be at least 8 characters';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    showToast('Account created successfully!', 'success');
+                    window.location.href = '/';
+                } else {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.add('show');
+                }
+            } catch (error) {
+                errorEl.textContent = 'Server error. Please try again.';
+                errorEl.classList.add('show');
+            }
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorEl = document.getElementById('loginError');
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please enter username and password';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    showToast('Logged in successfully!', 'success');
+                    window.location.href = '/';
+                } else {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.add('show');
+                }
+            } catch (error) {
+                errorEl.textContent = 'Server error. Please try again.';
+                errorEl.classList.add('show');
+            }
+        }
+
+        function showRegister() {
+            document.getElementById('authTitle').textContent = 'Create Account';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('regError').classList.remove('show');
+        }
+
+        function showLogin() {
+            document.getElementById('authTitle').textContent = 'Welcome Back';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('loginError').classList.remove('show');
+        }
+
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        const savedToken = localStorage.getItem('accessToken');
+        if (savedToken) {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>
