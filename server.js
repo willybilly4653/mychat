@@ -15,26 +15,22 @@ const io = socketIO(server, {
   }
 });
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// In-memory storage (use database like MongoDB in production)
-const users = new Map(); // userId -> { id, username, passwordHash, friends, online, socketId }
-const messages = new Map(); // chatKey -> array of messages
+const users = new Map();
+const messages = new Map();
 const refreshTokens = new Set();
+const friendRequests = new Map();
 
-// Secret keys (store in .env in production)
 const JWT_SECRET = 'your-secret-key-change-this';
 const JWT_REFRESH_SECRET = 'your-refresh-secret-key-change-this';
 
-// Helper functions
 function getChatKey(userId1, userId2) {
   return [userId1, userId2].sort().join('_');
 }
 
-// Generate tokens
 function generateTokens(userId, username) {
   const accessToken = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '15m' });
   const refreshToken = jwt.sign({ userId, username }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
@@ -42,7 +38,6 @@ function generateTokens(userId, username) {
   return { accessToken, refreshToken };
 }
 
-// Middleware to verify token
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -60,7 +55,21 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Routes
+function containsProfanity(text) {
+  const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
+  const lowerText = text.toLowerCase();
+  return badWords.some(word => lowerText.includes(word));
+}
+
+function containsEmoji(text) {
+  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/u;
+  return emojiRegex.test(text);
+}
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
 
@@ -68,11 +77,26 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
+  if (username.length > 20) {
+    return res.status(400).json({ error: 'Username must be 20 characters or less' });
+  }
+
+  if (username.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+
+  if (containsProfanity(username)) {
+    return res.status(400).json({ error: 'Username contains inappropriate language' });
+  }
+
+  if (containsEmoji(username)) {
+    return res.status(400).json({ error: 'Username cannot contain emojis' });
+  }
+
   if (password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
-  // Check if username exists
   let usernameExists = false;
   for (let user of users.values()) {
     if (user.username.toLowerCase() === username.toLowerCase()) {
@@ -85,7 +109,6 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Username already taken' });
   }
 
-  // Hash password and create user
   const hashedPassword = await bcrypt.hash(password, 10);
   const userId = Date.now().toString();
   const newUser = {
@@ -116,7 +139,6 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
-  // Find user
   let foundUser = null;
   for (let user of users.values()) {
     if (user.username.toLowerCase() === username.toLowerCase()) {
@@ -144,6 +166,14 @@ app.post('/api/login', async (req, res) => {
   });
 });
 
+app.get('/api/user', authenticateToken, (req, res) => {
+  const user = users.get(req.user.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  res.json({ id: user.id, username: user.username, friends: user.friends });
+});
+
 app.post('/api/refresh-token', (req, res) => {
   const { refreshToken } = req.body;
 
@@ -162,11 +192,6 @@ app.post('/api/refresh-token', (req, res) => {
 });
 
 app.post('/api/logout', authenticateToken, (req, res) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (token) {
-    // In a real app, add token to blacklist
-  }
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -179,14 +204,20 @@ app.get('/api/users/search', authenticateToken, (req, res) => {
   const results = [];
   for (let user of users.values()) {
     if (user.username.toLowerCase().includes(q.toLowerCase()) && user.id !== req.user.userId) {
-      results.push({ id: user.id, username: user.username });
+      if (!user.friends.includes(req.user.userId)) {
+        const existingRequest = friendRequests.get(user.id);
+        const hasPending = existingRequest && existingRequest.some(r => r.fromId === req.user.userId || r.toId === req.user.userId);
+        if (!hasPending) {
+          results.push({ id: user.id, username: user.username });
+        }
+      }
       if (results.length >= 10) break;
     }
   }
   res.json(results);
 });
 
-app.post('/api/friends/add', authenticateToken, (req, res) => {
+app.post('/api/friends/request', authenticateToken, (req, res) => {
   const { friendId } = req.body;
   const userId = req.user.userId;
 
@@ -201,18 +232,99 @@ app.post('/api/friends/add', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Already friends' });
   }
 
-  user.friends.push(friendId);
-  friend.friends.push(userId);
+  if (!friendRequests.has(friendId)) {
+    friendRequests.set(friendId, []);
+  }
+
+  const existingRequests = friendRequests.get(friendId);
+  const requestExists = existingRequests.some(r => r.fromId === userId);
+  
+  if (requestExists) {
+    return res.status(400).json({ error: 'Friend request already sent' });
+  }
+
+  existingRequests.push({
+    fromId: userId,
+    fromUsername: user.username,
+    toId: friendId,
+    timestamp: new Date().toISOString()
+  });
+
+  friendRequests.set(friendId, existingRequests);
+
+  if (friend.socketId) {
+    io.to(friend.socketId).emit('friend-request', {
+      fromId: userId,
+      fromUsername: user.username
+    });
+  }
+
+  res.json({ message: 'Friend request sent' });
+});
+
+app.get('/api/friends/requests', authenticateToken, (req, res) => {
+  const userId = req.user.userId;
+  const requests = friendRequests.get(userId) || [];
+  res.json(requests.map(r => ({
+    fromId: r.fromId,
+    fromUsername: r.fromUsername
+  })));
+});
+
+app.post('/api/friends/accept', authenticateToken, (req, res) => {
+  const { friendId } = req.body;
+  const userId = req.user.userId;
+
+  const user = users.get(userId);
+  const friend = users.get(friendId);
+
+  if (!friend) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const requests = friendRequests.get(userId) || [];
+  const requestIndex = requests.findIndex(r => r.fromId === friendId);
+  
+  if (requestIndex === -1) {
+    return res.status(400).json({ error: 'No friend request found' });
+  }
+
+  requests.splice(requestIndex, 1);
+  friendRequests.set(userId, requests);
+
+  if (!user.friends.includes(friendId)) {
+    user.friends.push(friendId);
+  }
+  if (!friend.friends.includes(userId)) {
+    friend.friends.push(userId);
+  }
 
   users.set(userId, user);
   users.set(friendId, friend);
 
-  // Notify friend if online
   if (friend.socketId) {
-    io.to(friend.socketId).emit('friend-added', { friendId: userId, friendName: user.username });
+    io.to(friend.socketId).emit('friend-request-accepted', {
+      fromId: userId,
+      fromUsername: user.username
+    });
   }
 
-  res.json({ message: 'Friend added successfully', friends: user.friends });
+  res.json({ message: 'Friend request accepted' });
+});
+
+app.post('/api/friends/decline', authenticateToken, (req, res) => {
+  const { friendId } = req.body;
+  const userId = req.user.userId;
+
+  const requests = friendRequests.get(userId) || [];
+  const requestIndex = requests.findIndex(r => r.fromId === friendId);
+  
+  if (requestIndex !== -1) {
+    requests.splice(requestIndex, 1);
+    friendRequests.set(userId, requests);
+  }
+
+  res.json({ message: 'Friend request declined' });
 });
 
 app.get('/api/friends/list', authenticateToken, (req, res) => {
@@ -236,7 +348,6 @@ app.get('/api/messages/:friendId', authenticateToken, (req, res) => {
   res.json(chatMessages);
 });
 
-// Socket.IO for real-time messaging
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -251,7 +362,6 @@ io.on('connection', (socket) => {
         users.set(decoded.userId, user);
         socket.userId = decoded.userId;
 
-        // Notify friends that user is online
         user.friends.forEach(friendId => {
           const friend = users.get(friendId);
           if (friend && friend.socketId) {
@@ -275,6 +385,11 @@ io.on('connection', (socket) => {
 
     if (!senderId || !receiverId || !text) return;
 
+    if (containsProfanity(text) || containsEmoji(text)) {
+      socket.emit('message-blocked', { message: 'Message contains inappropriate content' });
+      return;
+    }
+
     const message = {
       id: Date.now().toString(),
       senderId,
@@ -290,13 +405,11 @@ io.on('connection', (socket) => {
     }
     messages.get(chatKey).push(message);
 
-    // Send to receiver if online
     const receiver = users.get(receiverId);
     if (receiver && receiver.socketId) {
       io.to(receiver.socketId).emit('new-message', message);
     }
 
-    // Confirm to sender
     socket.emit('message-sent', message);
   });
 
@@ -313,6 +426,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('friend-request-accepted', (data) => {
+    const { friendId } = data;
+    const userId = socket.userId;
+    const user = users.get(userId);
+    const friend = users.get(friendId);
+    
+    if (friend && friend.socketId) {
+      io.to(friend.socketId).emit('friend-request-accepted', {
+        fromId: userId,
+        fromUsername: user.username
+      });
+    }
+  });
+
   socket.on('disconnect', () => {
     if (socket.userId) {
       const user = users.get(socket.userId);
@@ -321,7 +448,6 @@ io.on('connection', (socket) => {
         user.socketId = null;
         users.set(socket.userId, user);
 
-        // Notify friends
         user.friends.forEach(friendId => {
           const friend = users.get(friendId);
           if (friend && friend.socketId) {
