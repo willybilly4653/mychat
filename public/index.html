@@ -736,9 +736,9 @@
     </div>
 
     <div id="callContainer" class="call-container">
-        <video id="remoteVideo" class="remote-video" autoplay playsinline style="display: none;"></video>
+        <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
         <div id="remoteAvatar" class="remote-avatar"></div>
-        <video id="localVideo" class="local-video" autoplay playsinline muted style="display: none;"></video>
+        <video id="localVideo" class="local-video" autoplay playsinline muted></video>
         <div id="localAvatar" class="local-avatar"></div>
         
         <div id="callStatusBadges" class="call-status-badge">
@@ -754,7 +754,7 @@
         
         <div id="callingStatus" class="calling-status" style="display: none;">
             <h2>Calling...</h2>
-            <p>Ringing</p>
+            <p>Waiting for answer</p>
         </div>
         
         <div class="call-controls">
@@ -784,16 +784,16 @@
         let refreshToken = null;
         let typingTimeout = null;
         let pendingRequestsList = [];
+        let userPeerIds = {};
         
         let peer = null;
         let currentCall = null;
         let localStream = null;
         let isMuted = false;
-        let isVideoOff = true;
+        let isVideoOff = false;
         let incomingCallData = null;
         let callRingtone = null;
         let callRingtoneTimeout = null;
-        let isCalling = false;
 
         function updateCallBadges() {
             const muteBadge = document.getElementById('muteBadge');
@@ -855,23 +855,27 @@
         }
 
         function initPeer() {
-            peer = new Peer(currentUser.id, {
+            peer = new Peer(currentUser.id + '_' + Date.now(), {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' }
                     ]
                 }
             });
             
             peer.on('open', (id) => {
                 console.log('Peer ready! ID:', id);
+                userPeerIds[currentUser.id] = id;
                 socket.emit('peer-ready', { peerId: id });
             });
             
             peer.on('call', (call) => {
                 incomingCallData = call;
-                document.getElementById('callerName').textContent = call.metadata?.fromName + ' is calling you!';
+                document.getElementById('callerName').innerHTML = call.metadata?.fromName + ' is calling you!';
                 document.getElementById('incomingCall').classList.add('show');
                 startCallRingtone();
             });
@@ -892,46 +896,50 @@
                 localVideo.style.display = 'none';
                 localAvatar.style.display = 'flex';
                 if (currentUser) {
-                    localAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+                    localAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
                 }
             } else {
                 localVideo.style.display = 'block';
                 localAvatar.style.display = 'none';
             }
             
-            if (currentCall && (!currentCall._remoteStream || isVideoOff)) {
+            if (currentCall && currentCall._remoteStream) {
+                remoteVideo.style.display = 'block';
+                remoteAvatar.style.display = 'none';
+            } else if (currentCall) {
                 remoteVideo.style.display = 'none';
                 remoteAvatar.style.display = 'flex';
                 if (currentChatFriend) {
-                    remoteAvatar.textContent = currentChatFriend.username.charAt(0).toUpperCase();
+                    remoteAvatar.innerHTML = currentChatFriend.username.charAt(0).toUpperCase();
                 }
-            } else if (currentCall && currentCall._remoteStream) {
-                remoteVideo.style.display = 'block';
-                remoteAvatar.style.display = 'none';
             }
             
             updateCallBadges();
         }
 
         async function startVideoCall(friendId, friendName) {
-            isCalling = true;
             document.getElementById('callingStatus').style.display = 'block';
             
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                if (localStream) {
-                    if (isVideoOff) {
-                        const videoTrack = localStream.getVideoTracks()[0];
-                        if (videoTrack) {
-                            videoTrack.enabled = false;
-                        }
-                    }
+                
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack && isVideoOff) {
+                    videoTrack.enabled = false;
                 }
+                
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('callContainer').classList.add('active');
                 updateCallUI();
                 
-                const call = peer.call(friendId, localStream, {
+                const friendPeerId = userPeerIds[friendId];
+                if (!friendPeerId) {
+                    showToast('Friend is not connected for calls', 'error');
+                    endCall();
+                    return;
+                }
+                
+                const call = peer.call(friendPeerId, localStream, {
                     metadata: { fromName: currentUser.username }
                 });
                 
@@ -939,11 +947,16 @@
                     currentCall._remoteStream = remoteStream;
                     document.getElementById('remoteVideo').srcObject = remoteStream;
                     document.getElementById('callingStatus').style.display = 'none';
-                    isCalling = false;
                     updateCallUI();
                 });
                 
                 call.on('close', () => {
+                    endCall();
+                });
+                
+                call.on('error', (err) => {
+                    console.error('Call error:', err);
+                    showToast('Call failed: ' + err.message, 'error');
                     endCall();
                 });
                 
@@ -952,7 +965,6 @@
             } catch (err) {
                 console.error('Camera error:', err);
                 showToast('Cannot access camera or microphone. Please check permissions.', 'error');
-                isCalling = false;
                 document.getElementById('callingStatus').style.display = 'none';
                 endCall();
             }
@@ -966,14 +978,12 @@
             
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                if (localStream) {
-                    if (isVideoOff) {
-                        const videoTrack = localStream.getVideoTracks()[0];
-                        if (videoTrack) {
-                            videoTrack.enabled = false;
-                        }
-                    }
+                
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack && isVideoOff) {
+                    videoTrack.enabled = false;
                 }
+                
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('callContainer').classList.add('active');
                 updateCallUI();
@@ -985,6 +995,10 @@
                     updateCallUI();
                 });
                 call.on('close', () => {
+                    endCall();
+                });
+                call.on('error', (err) => {
+                    console.error('Call error:', err);
                     endCall();
                 });
                 
@@ -1010,7 +1024,6 @@
 
         function endCall() {
             stopCallRingtone();
-            isCalling = false;
             if (currentCall) {
                 currentCall.close();
                 currentCall = null;
@@ -1022,13 +1035,13 @@
             document.getElementById('callContainer').classList.remove('active');
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('localVideo').srcObject = null;
-            document.getElementById('callingStatus').style.display = 'none';
             document.getElementById('remoteVideo').style.display = 'none';
             document.getElementById('remoteAvatar').style.display = 'flex';
+            document.getElementById('callingStatus').style.display = 'none';
             isMuted = false;
-            isVideoOff = true;
-            document.getElementById('toggleMuteBtn').textContent = 'Mute';
-            document.getElementById('toggleVideoBtn').textContent = 'Camera Off';
+            isVideoOff = false;
+            document.getElementById('toggleMuteBtn').innerHTML = 'Mute';
+            document.getElementById('toggleVideoBtn').innerHTML = 'Camera Off';
             updateCallBadges();
         }
 
@@ -1038,7 +1051,7 @@
                 if (audioTrack) {
                     audioTrack.enabled = !audioTrack.enabled;
                     isMuted = !audioTrack.enabled;
-                    document.getElementById('toggleMuteBtn').textContent = isMuted ? 'Unmute' : 'Mute';
+                    document.getElementById('toggleMuteBtn').innerHTML = isMuted ? 'Unmute' : 'Mute';
                     updateCallBadges();
                 }
             }
@@ -1050,13 +1063,9 @@
                 if (videoTrack) {
                     videoTrack.enabled = !videoTrack.enabled;
                     isVideoOff = !videoTrack.enabled;
-                    document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
+                    document.getElementById('toggleVideoBtn').innerHTML = isVideoOff ? 'Camera On' : 'Camera Off';
                     updateCallUI();
                 }
-            } else {
-                isVideoOff = !isVideoOff;
-                document.getElementById('toggleVideoBtn').textContent = isVideoOff ? 'Camera On' : 'Camera Off';
-                updateCallUI();
             }
         }
 
@@ -1075,7 +1084,7 @@
                 z-index: 3000;
                 animation: slideUp 0.3s ease;
             `;
-            toast.textContent = message;
+            toast.innerHTML = message;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2000);
         }
@@ -1318,8 +1327,9 @@
                     }
                 }
             });
-            socket.on('peer-id', (data) => {
-                console.log('Friend peer ID:', data);
+            socket.on('peer-ready', (data) => {
+                userPeerIds[data.userId] = data.peerId;
+                console.log('Peer ready for user:', data.userId, data.peerId);
             });
         }
 
@@ -1465,8 +1475,8 @@
 
         async function selectFriend(friendId, friendName) {
             currentChatFriend = { id: friendId, username: friendName };
-            document.getElementById('chatWith').textContent = 'Chat with ' + friendName;
-            document.getElementById('typingStatus').textContent = '';
+            document.getElementById('chatWith').innerHTML = 'Chat with ' + friendName;
+            document.getElementById('typingStatus').innerHTML = '';
             await loadMessages();
             loadFriends();
             document.getElementById('messageInput').focus();
@@ -1533,8 +1543,8 @@
         async function showApp() {
             document.getElementById('authContainer').classList.add('hidden');
             document.getElementById('appContainer').classList.add('visible');
-            document.getElementById('currentUsername').textContent = currentUser.username;
-            document.getElementById('userAvatar').textContent = currentUser.username.charAt(0).toUpperCase();
+            document.getElementById('currentUsername').innerHTML = currentUser.username;
+            document.getElementById('userAvatar').innerHTML = currentUser.username.charAt(0).toUpperCase();
             await loadFriends();
             await loadPendingRequests();
             initSocket();
