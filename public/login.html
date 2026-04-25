@@ -3,313 +3,489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Mychat</title>
+    <title>Mychat</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
-        :root {
-            --bg-dark: #1a1a2e;
-            --bg-darker: #0f0f1a;
-            --primary: #0f3460;
-            --accent: #e94560;
-            --text: #eee;
-            --text-dim: #888;
-            --border: #2a2a3e;
-            --success: #10b981;
-        }
-
+        
         body {
-            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
-            color: var(--text);
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
         }
-
-        .auth-box {
+        
+        .setup-card {
             background: rgba(22, 30, 46, 0.95);
             backdrop-filter: blur(20px);
-            border-radius: 24px;
-            padding: 40px;
-            width: 90%;
-            max-width: 400px;
             border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .auth-box h2 {
+            border-radius: 24px;
+            padding: 48px 40px;
+            max-width: 450px;
+            width: 90%;
             text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(135deg, var(--text), var(--accent));
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #eee, #e94560);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
+            margin-bottom: 8px;
         }
-
+        
+        .sub {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+        
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            text-align: left;
         }
-
-        .input-group input {
+        
+        label {
+            display: block;
+            color: #aaa;
+            font-size: 12px;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+        
+        input {
             width: 100%;
-            padding: 12px 16px;
             background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border);
+            border: 1px solid #2a2a3e;
             border-radius: 12px;
-            color: var(--text);
-            font-size: 14px;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent), #c73e56);
+            padding: 14px 16px;
             color: white;
+            font-size: 15px;
+            transition: all 0.2s;
         }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.3);
+        
+        input:focus {
+            outline: none;
+            border-color: #e94560;
         }
-
+        
+        input.error {
+            border-color: #ef4444;
+        }
+        
         .error-msg {
             color: #ef4444;
-            font-size: 12px;
-            margin-top: 5px;
+            font-size: 11px;
+            margin-top: 6px;
             display: none;
         }
-
+        
         .error-msg.show {
             display: block;
         }
-
-        .toggle-auth {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 13px;
-        }
-
-        .toggle-auth a {
-            color: var(--accent);
-            text-decoration: none;
+        
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #e94560, #c73e56);
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
+            margin-top: 16px;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.3);
+        }
+        
+        .toggle-btn {
+            background: transparent;
+            border: 1px solid #2a2a3e;
+            margin-top: 12px;
+        }
+        
+        .toggle-btn:hover {
+            background: rgba(255,255,255,0.05);
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .hint {
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; visibility: hidden; }
+        }
+        
+        .success {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10,10,10,0.95);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .success.active {
+            display: flex;
+            animation: fadeOut 0.3s ease 1s forwards;
+        }
+        
+        .check {
+            font-size: 48px;
+            color: #10b981;
+        }
+        
+        .success p {
+            color: white;
+            font-size: 16px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-left: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div class="auth-box">
-        <h2 id="authTitle">Welcome Back</h2>
-        <div id="loginForm">
+    <div class="setup-card">
+        <h1>Mychat</h1>
+        <div class="sub" id="formTitle">Login to your account</div>
+        
+        <div id="loginFields">
             <div class="input-group">
-                <input type="text" id="loginUsername" placeholder="Username (max 20 chars)" maxlength="20">
+                <label>USERNAME</label>
+                <input type="text" id="loginUsername" placeholder="Enter username" maxlength="20" autocomplete="off">
+                <div class="error-msg" id="loginError"></div>
             </div>
+            
             <div class="input-group">
-                <input type="password" id="loginPassword" placeholder="Password">
+                <label>PASSWORD</label>
+                <input type="password" id="loginPassword" placeholder="Enter password">
+                <div class="error-msg" id="loginPasswordError"></div>
             </div>
-            <div class="error-msg" id="loginError"></div>
-            <button class="btn btn-primary" onclick="handleLogin()">Login</button>
-            <div class="toggle-auth">Don't have an account? <a onclick="showRegister()">Sign up</a></div>
+            
+            <button id="loginBtn" onclick="handleLogin()">Login</button>
+            <button class="toggle-btn" onclick="showRegister()">Create Account</button>
         </div>
-        <div id="registerForm" style="display: none;">
+        
+        <div id="registerFields" style="display: none;">
             <div class="input-group">
-                <input type="text" id="regUsername" placeholder="Username (max 20 chars, no profanity)" maxlength="20">
+                <label>USERNAME</label>
+                <input type="text" id="regUsername" placeholder="Enter username (3-20 chars)" maxlength="20" autocomplete="off">
+                <div class="error-msg" id="regUsernameError"></div>
             </div>
+            
             <div class="input-group">
-                <input type="password" id="regPassword" placeholder="Password (min 8 characters)">
+                <label>PASSWORD</label>
+                <input type="password" id="regPassword" placeholder="Min 8 characters">
+                <div class="error-msg" id="regPasswordError"></div>
             </div>
+            
             <div class="input-group">
-                <input type="password" id="regConfirm" placeholder="Confirm Password">
+                <label>CONFIRM PASSWORD</label>
+                <input type="password" id="regConfirm" placeholder="Confirm password">
+                <div class="error-msg" id="regConfirmError"></div>
             </div>
-            <div class="error-msg" id="regError"></div>
-            <button class="btn btn-primary" onclick="handleRegister()">Create Account</button>
-            <div class="toggle-auth">Already have an account? <a onclick="showLogin()">Login</a></div>
+            
+            <button id="registerBtn" onclick="handleRegister()">Create Account</button>
+            <button class="toggle-btn" onclick="showLogin()">Back to Login</button>
         </div>
+        
+        <div class="hint"></div>
+    </div>
+    
+    <div id="success" class="success">
+        <div class="check">✓</div>
+        <p id="successMsg">Welcome to Mychat</p>
     </div>
 
     <script>
         const API_URL = '';
-
-        function showToast(message, type) {
-            const toast = document.createElement('div');
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: ${type === 'success' ? '#10b981' : '#ef4444'};
-                color: white;
-                padding: 12px 24px;
-                border-radius: 12px;
-                font-size: 14px;
-                z-index: 3000;
-                animation: slideUp 0.3s ease;
-            `;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
+        const badWords = [
+            'fuck', 'shit', 'ass', 'bitch', 'cunt', 'dick', 'pussy', 'cock',
+            'whore', 'slut', 'bastard', 'damn', 'nigger', 'chink', 'fag',
+            'faggot', 'retard', 'rape', 'penis', 'vagina', 'sex', 'porn',
+            'xxx', 'nude', 'naked', 'kill', 'murder', 'hitler', 'nazi',
+            'kike', 'cracker', 'spic', 'gook', 'nigga', 'clit', 'tits',
+            'boobs', 'butt', 'anal', 'cum', 'semen', 'molest', 'pedo'
+        ];
+        
+        const leetMap = {
+            '0': 'o', '1': 'i', '2': 'z', '3': 'e', '4': 'a', '5': 's',
+            '6': 'g', '7': 't', '8': 'b', '9': 'g', '@': 'a', '$': 's',
+            '!': 'i', '+': 't'
+        };
+        
+        function normalize(text) {
+            let normalized = text.toLowerCase();
+            for (let [leet, letter] of Object.entries(leetMap)) {
+                normalized = normalized.split(leet).join(letter);
+            }
+            normalized = normalized.replace(/[^a-z]/g, '');
+            return normalized;
         }
-
-        function containsProfanity(text) {
-            const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
+        
+        function containsBadWord(text) {
+            if (!text) return false;
             const lowerText = text.toLowerCase();
-            return badWords.some(word => lowerText.includes(word));
+            const normalized = normalize(text);
+            
+            for (const word of badWords) {
+                if (lowerText.includes(word) || normalized.includes(word)) {
+                    return true;
+                }
+            }
+            return false;
         }
-
+        
         function containsEmoji(text) {
             const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/u;
             return emojiRegex.test(text);
         }
-
+        
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            document.getElementById('successMsg').textContent = message;
+            successDiv.classList.add('active');
+            setTimeout(() => {
+                successDiv.classList.remove('active');
+            }, 1300);
+        }
+        
         async function handleRegister() {
             const username = document.getElementById('regUsername').value.trim();
             const password = document.getElementById('regPassword').value;
             const confirm = document.getElementById('regConfirm').value;
-            const errorEl = document.getElementById('regError');
-
-            if (!username || !password) {
-                errorEl.textContent = 'Please fill all fields';
-                errorEl.classList.add('show');
-                return;
+            
+            const usernameError = document.getElementById('regUsernameError');
+            const passwordError = document.getElementById('regPasswordError');
+            const confirmError = document.getElementById('regConfirmError');
+            
+            usernameError.classList.remove('show');
+            passwordError.classList.remove('show');
+            confirmError.classList.remove('show');
+            
+            let hasError = false;
+            
+            if (!username) {
+                usernameError.textContent = 'Username is required';
+                usernameError.classList.add('show');
+                hasError = true;
+            } else if (username.length < 3) {
+                usernameError.textContent = 'Username must be at least 3 characters';
+                usernameError.classList.add('show');
+                hasError = true;
+            } else if (username.length > 20) {
+                usernameError.textContent = 'Username must be less than 20 characters';
+                usernameError.classList.add('show');
+                hasError = true;
+            } else if (containsBadWord(username)) {
+                usernameError.textContent = 'Username contains inappropriate language';
+                usernameError.classList.add('show');
+                hasError = true;
+            } else if (containsEmoji(username)) {
+                usernameError.textContent = 'Username cannot contain emojis';
+                usernameError.classList.add('show');
+                hasError = true;
             }
-
-            if (username.length > 20) {
-                errorEl.textContent = 'Username must be 20 characters or less';
-                errorEl.classList.add('show');
-                return;
+            
+            if (!password) {
+                passwordError.textContent = 'Password is required';
+                passwordError.classList.add('show');
+                hasError = true;
+            } else if (password.length < 8) {
+                passwordError.textContent = 'Password must be at least 8 characters';
+                passwordError.classList.add('show');
+                hasError = true;
             }
-
-            if (username.length < 3) {
-                errorEl.textContent = 'Username must be at least 3 characters';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (containsProfanity(username)) {
-                errorEl.textContent = 'Username contains inappropriate language';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (containsEmoji(username)) {
-                errorEl.textContent = 'Username cannot contain emojis';
-                errorEl.classList.add('show');
-                return;
-            }
-
+            
             if (password !== confirm) {
-                errorEl.textContent = 'Passwords do not match';
-                errorEl.classList.add('show');
-                return;
+                confirmError.textContent = 'Passwords do not match';
+                confirmError.classList.add('show');
+                hasError = true;
             }
-
-            if (password.length < 8) {
-                errorEl.textContent = 'Password must be at least 8 characters';
-                errorEl.classList.add('show');
-                return;
-            }
-
+            
+            if (hasError) return;
+            
+            const loginBtn = document.getElementById('registerBtn');
+            const originalText = loginBtn.textContent;
+            loginBtn.innerHTML = 'Creating Account<span class="loading"></span>';
+            loginBtn.disabled = true;
+            
             try {
                 const response = await fetch(`${API_URL}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
+                
                 const data = await response.json();
+                
                 if (response.ok) {
                     localStorage.setItem('accessToken', data.accessToken);
                     localStorage.setItem('refreshToken', data.refreshToken);
                     localStorage.setItem('currentUser', JSON.stringify(data.user));
-                    showToast('Account created successfully!', 'success');
-                    window.location.href = '/';
+                    showSuccess('Account created!');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1300);
                 } else {
-                    errorEl.textContent = data.error;
-                    errorEl.classList.add('show');
+                    usernameError.textContent = data.error;
+                    usernameError.classList.add('show');
+                    loginBtn.innerHTML = originalText;
+                    loginBtn.disabled = false;
                 }
             } catch (error) {
-                errorEl.textContent = 'Server error. Please try again.';
-                errorEl.classList.add('show');
+                usernameError.textContent = 'Server error. Please try again.';
+                usernameError.classList.add('show');
+                loginBtn.innerHTML = originalText;
+                loginBtn.disabled = false;
             }
         }
-
+        
         async function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
-            const errorEl = document.getElementById('loginError');
-
-            if (!username || !password) {
-                errorEl.textContent = 'Please enter username and password';
-                errorEl.classList.add('show');
-                return;
+            
+            const loginError = document.getElementById('loginError');
+            const passwordError = document.getElementById('loginPasswordError');
+            
+            loginError.classList.remove('show');
+            passwordError.classList.remove('show');
+            
+            let hasError = false;
+            
+            if (!username) {
+                loginError.textContent = 'Username is required';
+                loginError.classList.add('show');
+                hasError = true;
             }
-
+            
+            if (!password) {
+                passwordError.textContent = 'Password is required';
+                passwordError.classList.add('show');
+                hasError = true;
+            }
+            
+            if (hasError) return;
+            
+            const loginBtn = document.getElementById('loginBtn');
+            const originalText = loginBtn.textContent;
+            loginBtn.innerHTML = 'Logging in<span class="loading"></span>';
+            loginBtn.disabled = true;
+            
             try {
                 const response = await fetch(`${API_URL}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
+                
                 const data = await response.json();
+                
                 if (response.ok) {
                     localStorage.setItem('accessToken', data.accessToken);
                     localStorage.setItem('refreshToken', data.refreshToken);
                     localStorage.setItem('currentUser', JSON.stringify(data.user));
-                    showToast('Logged in successfully!', 'success');
-                    window.location.href = '/';
+                    showSuccess('Welcome back!');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1300);
                 } else {
-                    errorEl.textContent = data.error;
-                    errorEl.classList.add('show');
+                    loginError.textContent = data.error;
+                    loginError.classList.add('show');
+                    loginBtn.innerHTML = originalText;
+                    loginBtn.disabled = false;
                 }
             } catch (error) {
-                errorEl.textContent = 'Server error. Please try again.';
-                errorEl.classList.add('show');
+                loginError.textContent = 'Server error. Please try again.';
+                loginError.classList.add('show');
+                loginBtn.innerHTML = originalText;
+                loginBtn.disabled = false;
             }
         }
-
+        
         function showRegister() {
-            document.getElementById('authTitle').textContent = 'Create Account';
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'block';
-            document.getElementById('regError').classList.remove('show');
+            document.getElementById('formTitle').textContent = 'Create Account';
+            document.getElementById('loginFields').style.display = 'none';
+            document.getElementById('registerFields').style.display = 'block';
+            document.getElementById('regUsername').value = '';
+            document.getElementById('regPassword').value = '';
+            document.getElementById('regConfirm').value = '';
+            document.getElementById('regUsernameError').classList.remove('show');
+            document.getElementById('regPasswordError').classList.remove('show');
+            document.getElementById('regConfirmError').classList.remove('show');
         }
-
+        
         function showLogin() {
-            document.getElementById('authTitle').textContent = 'Welcome Back';
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('formTitle').textContent = 'Login to your account';
+            document.getElementById('registerFields').style.display = 'none';
+            document.getElementById('loginFields').style.display = 'block';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').classList.remove('show');
+            document.getElementById('loginPasswordError').classList.remove('show');
         }
-
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideUp {
-                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-                to { opacity: 1; transform: translateX(-50%) translateY(0); }
-            }
-        `;
-        document.head.appendChild(style);
-
+        
+        document.getElementById('loginUsername')?.addEventListener('input', function() {
+            document.getElementById('loginError').classList.remove('show');
+            this.classList.remove('error');
+        });
+        
+        document.getElementById('loginPassword')?.addEventListener('input', function() {
+            document.getElementById('loginPasswordError').classList.remove('show');
+            this.classList.remove('error');
+        });
+        
+        document.getElementById('regUsername')?.addEventListener('input', function() {
+            document.getElementById('regUsernameError').classList.remove('show');
+            this.classList.remove('error');
+        });
+        
         const savedToken = localStorage.getItem('accessToken');
         if (savedToken) {
             window.location.href = '/';
         }
+        
+        document.getElementById('loginPassword')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleLogin();
+        });
+        
+        document.getElementById('regConfirm')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleRegister();
+        });
     </script>
 </body>
 </html>
