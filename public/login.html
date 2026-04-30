@@ -196,6 +196,12 @@
                 <div class="error-msg" id="loginPasswordError"></div>
             </div>
             
+            <div class="input-group">
+                <label>
+                    <input type="checkbox" id="rememberMe"> Remember me
+                </label>
+            </div>
+            
             <button id="loginBtn" onclick="handleLogin()">Login</button>
             <button class="toggle-btn" onclick="showRegister()">Create Account</button>
         </div>
@@ -247,6 +253,31 @@
             '6': 'g', '7': 't', '8': 'b', '9': 'g', '@': 'a', '$': 's',
             '!': 'i', '+': 't'
         };
+        
+        function setCookie(name, value, days) {
+            let expires = '';
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = '; expires=' + date.toUTCString();
+            }
+            document.cookie = name + '=' + (value || '') + expires + '; path=/; SameSite=Lax';
+        }
+        
+        function getCookie(name) {
+            const nameEQ = name + '=';
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+        
+        function deleteCookie(name) {
+            document.cookie = name + '=; Max-Age=-99999999; path=/';
+        }
         
         function normalize(text) {
             let normalized = text.toLowerCase();
@@ -339,10 +370,10 @@
             
             if (hasError) return;
             
-            const loginBtn = document.getElementById('registerBtn');
-            const originalText = loginBtn.textContent;
-            loginBtn.innerHTML = 'Creating Account<span class="loading"></span>';
-            loginBtn.disabled = true;
+            const registerBtn = document.getElementById('registerBtn');
+            const originalText = registerBtn.textContent;
+            registerBtn.innerHTML = 'Creating Account<span class="loading"></span>';
+            registerBtn.disabled = true;
             
             try {
                 const response = await fetch(`${API_URL}/api/register`, {
@@ -354,9 +385,9 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    localStorage.setItem('accessToken', data.accessToken);
-                    localStorage.setItem('refreshToken', data.refreshToken);
-                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    setCookie('accessToken', data.accessToken, 7);
+                    setCookie('refreshToken', data.refreshToken, 7);
+                    setCookie('currentUser', JSON.stringify(data.user), 7);
                     showSuccess('Account created!');
                     setTimeout(() => {
                         window.location.href = '/';
@@ -364,20 +395,21 @@
                 } else {
                     usernameError.textContent = data.error;
                     usernameError.classList.add('show');
-                    loginBtn.innerHTML = originalText;
-                    loginBtn.disabled = false;
+                    registerBtn.innerHTML = originalText;
+                    registerBtn.disabled = false;
                 }
             } catch (error) {
                 usernameError.textContent = 'Server error. Please try again.';
                 usernameError.classList.add('show');
-                loginBtn.innerHTML = originalText;
-                loginBtn.disabled = false;
+                registerBtn.innerHTML = originalText;
+                registerBtn.disabled = false;
             }
         }
         
         async function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
             
             const loginError = document.getElementById('loginError');
             const passwordError = document.getElementById('loginPasswordError');
@@ -416,9 +448,11 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    localStorage.setItem('accessToken', data.accessToken);
-                    localStorage.setItem('refreshToken', data.refreshToken);
-                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    const days = rememberMe ? 30 : 1;
+                    setCookie('accessToken', data.accessToken, days);
+                    setCookie('refreshToken', data.refreshToken, days);
+                    setCookie('currentUser', JSON.stringify(data.user), days);
+                    setCookie('username', username, days);
                     showSuccess('Welcome back!');
                     setTimeout(() => {
                         window.location.href = '/';
@@ -457,6 +491,15 @@
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').classList.remove('show');
             document.getElementById('loginPasswordError').classList.remove('show');
+            document.getElementById('rememberMe').checked = false;
+        }
+        
+        function checkExistingSession() {
+            const token = getCookie('accessToken');
+            const savedUser = getCookie('currentUser');
+            if (token && savedUser) {
+                window.location.href = '/';
+            }
         }
         
         document.getElementById('loginUsername')?.addEventListener('input', function() {
@@ -474,11 +517,6 @@
             this.classList.remove('error');
         });
         
-        const savedToken = localStorage.getItem('accessToken');
-        if (savedToken) {
-            window.location.href = '/';
-        }
-        
         document.getElementById('loginPassword')?.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') handleLogin();
         });
@@ -486,6 +524,8 @@
         document.getElementById('regConfirm')?.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') handleRegister();
         });
+        
+        checkExistingSession();
     </script>
 </body>
 </html>
