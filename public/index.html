@@ -6,44 +6,6 @@
     <title>Mychat</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
-    <script>
-
-function setCookie(name, value, days) {
-    let expires = '';
-    if (days) {
-        const date = new Date();
-        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-        expires = '; expires=' + date.toUTCString();
-    }
-    document.cookie = name + '=' + (value || '')  + expires + '; path=/';
-}
-
-function getCookie(name) {
-    const nameEQ = name + '=';
-    const ca = document.cookie.split(';');
-    for(let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
-    }
-    return null;
-}
-
-function deleteCookie(name) {
-    document.cookie = name + '=; Max-Age=-99999999;';
-}
-
-
-let accessToken = getCookie('accessToken');
-if (accessToken) {
-
-    console.log('User is authenticated');
-} else {
-  
-    console.log('User is not authenticated');
-}
-</script>
-
     <style>
         * {
             margin: 0;
@@ -71,101 +33,33 @@ if (accessToken) {
             overflow: hidden;
         }
 
-        .auth-container {
+        .loading-screen {
             position: fixed;
             inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
             background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
-            transition: transform 0.3s ease;
+            z-index: 2000;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        .auth-container.hidden {
-            transform: translateY(-100%);
-            pointer-events: none;
-        }
-
-        .auth-box {
-            background: rgba(22, 30, 46, 0.95);
-            backdrop-filter: blur(20px);
-            border-radius: 24px;
-            padding: 40px;
-            width: 90%;
-            max-width: 400px;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .auth-box h2 {
-            text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(135deg, var(--text), var(--accent));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--text);
-            font-size: 14px;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent), #c73e56);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.3);
-        }
-
-        .error-msg {
-            color: #ef4444;
-            font-size: 12px;
-            margin-top: 5px;
+        .loading-screen.hidden {
             display: none;
         }
 
-        .error-msg.show {
-            display: block;
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(233, 69, 96, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
-        .toggle-auth {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 13px;
-        }
-
-        .toggle-auth a {
-            color: var(--accent);
-            text-decoration: none;
-            cursor: pointer;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         .app-container {
@@ -679,6 +573,11 @@ if (accessToken) {
             to { transform: translateX(0); opacity: 1; }
         }
 
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 width: 80px;
@@ -700,35 +599,9 @@ if (accessToken) {
     </style>
 </head>
 <body>
-    <div id="authContainer" class="auth-container">
-        <div class="auth-box">
-            <h2 id="authTitle">Create Account</h2>
-            <div id="loginForm" style="display: none;">
-                <div class="input-group">
-                    <input type="text" id="loginUsername" placeholder="Username max 20 chars" maxlength="20">
-                </div>
-                <div class="input-group">
-                    <input type="password" id="loginPassword" placeholder="Password">
-                </div>
-                <div class="error-msg" id="loginError"></div>
-                <button class="btn btn-primary" onclick="handleLogin()">Login</button>
-                <div class="toggle-auth">Dont have an account? <a onclick="showRegister()">Sign up</a></div>
-            </div>
-            <div id="registerForm">
-                <div class="input-group">
-                    <input type="text" id="regUsername" placeholder="Username max 20 chars no profanity" maxlength="20">
-                </div>
-                <div class="input-group">
-                    <input type="password" id="regPassword" placeholder="Password min 8 characters">
-                </div>
-                <div class="input-group">
-                    <input type="password" id="regConfirm" placeholder="Confirm Password">
-                </div>
-                <div class="error-msg" id="regError"></div>
-                <button class="btn btn-primary" onclick="handleRegister()">Create Account</button>
-                <div class="toggle-auth">Already have an account? <a onclick="showLogin()">Login</a></div>
-            </div>
-        </div>
+    <div id="loadingScreen" class="loading-screen">
+        <div class="spinner"></div>
+        <div>Loading Mychat...</div>
     </div>
 
     <div id="appContainer" class="app-container">
@@ -827,6 +700,27 @@ if (accessToken) {
         let incomingCallData = null;
         let callRingtone = null;
         let callRingtoneTimeout = null;
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        function setCookie(name, value, days) {
+            let expires = '';
+            if (days) {
+                const date = new Date();
+                date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                expires = '; expires=' + date.toUTCString();
+            }
+            document.cookie = name + '=' + (value || '') + expires + '; path=/; SameSite=Lax';
+        }
+
+        function deleteCookie(name) {
+            document.cookie = name + '=; Max-Age=-99999999; path=/';
+        }
 
         function updateCallBadges() {
             const muteBadge = document.getElementById('muteBadge');
@@ -1172,136 +1066,13 @@ if (accessToken) {
                 if (response.ok) {
                     const data = await response.json();
                     accessToken = data.accessToken;
-                    localStorage.setItem('accessToken', accessToken);
+                    setCookie('accessToken', accessToken, 7);
                     return true;
                 }
             } catch (error) {
                 console.error('Token refresh failed:', error);
             }
             return false;
-        }
-
-        async function handleRegister() {
-            const username = document.getElementById('regUsername').value.trim();
-            const password = document.getElementById('regPassword').value;
-            const confirm = document.getElementById('regConfirm').value;
-            const errorEl = document.getElementById('regError');
-
-            if (!username || !password) {
-                errorEl.textContent = 'Please fill all fields';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (username.length > 20) {
-                errorEl.textContent = 'Username must be 20 characters or less';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (username.length < 3) {
-                errorEl.textContent = 'Username must be at least 3 characters';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (containsProfanity(username)) {
-                errorEl.textContent = 'Username contains inappropriate language';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (containsEmoji(username)) {
-                errorEl.textContent = 'Username cannot contain emojis';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (password !== confirm) {
-                errorEl.textContent = 'Passwords do not match';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            if (password.length < 8) {
-                errorEl.textContent = 'Password must be at least 8 characters';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_URL}/api/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    accessToken = data.accessToken;
-                    refreshToken = data.refreshToken;
-                    localStorage.setItem('accessToken', accessToken);
-                    localStorage.setItem('refreshToken', refreshToken);
-                    currentUser = data.user;
-                    showToast('Account created successfully!', 'success');
-                    showApp();
-                } else {
-                    errorEl.textContent = data.error;
-                    errorEl.classList.add('show');
-                }
-            } catch (error) {
-                errorEl.textContent = 'Server error. Please try again.';
-                errorEl.classList.add('show');
-            }
-        }
-
-        async function handleLogin() {
-            const username = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value;
-            const errorEl = document.getElementById('loginError');
-
-            if (!username || !password) {
-                errorEl.textContent = 'Please enter username and password';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_URL}/api/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    accessToken = data.accessToken;
-                    refreshToken = data.refreshToken;
-                    localStorage.setItem('accessToken', accessToken);
-                    localStorage.setItem('refreshToken', refreshToken);
-                    currentUser = data.user;
-                    showToast('Logged in successfully!', 'success');
-                    showApp();
-                } else {
-                    errorEl.textContent = data.error;
-                    errorEl.classList.add('show');
-                }
-            } catch (error) {
-                errorEl.textContent = 'Server error. Please try again.';
-                errorEl.classList.add('show');
-            }
-        }
-
-        function showRegister() {
-            document.getElementById('authTitle').textContent = 'Create Account';
-            document.getElementById('loginForm').style.display = 'none';
-            document.getElementById('registerForm').style.display = 'block';
-            document.getElementById('regError').classList.remove('show');
-        }
-
-        function showLogin() {
-            document.getElementById('authTitle').textContent = 'Welcome Back';
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
-            document.getElementById('loginError').classList.remove('show');
         }
 
         async function logout() {
@@ -1314,16 +1085,11 @@ if (accessToken) {
             if (socket) socket.disconnect();
             if (peer) peer.destroy();
             stopCallRingtone();
-            currentUser = null;
-            currentChatFriend = null;
-            accessToken = null;
-            refreshToken = null;
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            document.getElementById('authContainer').classList.remove('hidden');
-            document.getElementById('appContainer').classList.remove('visible');
-            showLogin();
-            showToast('Logged out', 'info');
+            deleteCookie('accessToken');
+            deleteCookie('refreshToken');
+            deleteCookie('currentUser');
+            deleteCookie('username');
+            window.location.href = '/login.html';
         }
 
         function initSocket() {
@@ -1582,7 +1348,7 @@ if (accessToken) {
         });
 
         async function showApp() {
-            document.getElementById('authContainer').classList.add('hidden');
+            document.getElementById('loadingScreen').classList.add('hidden');
             document.getElementById('appContainer').classList.add('visible');
             document.getElementById('currentUsername').innerHTML = currentUser.username;
             document.getElementById('userAvatar').innerHTML = currentUser.username.charAt(0).toUpperCase();
@@ -1592,44 +1358,22 @@ if (accessToken) {
             initPeer();
         }
 
-        const savedAccessToken = localStorage.getItem('accessToken');
-        if (savedAccessToken) {
-            accessToken = savedAccessToken;
-            refreshToken = localStorage.getItem('refreshToken');
-            fetchWithAuth(`${API_URL}/api/friends/list`).then(async (response) => {
-                if (response.ok) {
-                    const userResponse = await fetchWithAuth(`${API_URL}/api/user`).catch(() => null);
-                    if (userResponse && userResponse.ok) {
-                        const userData = await userResponse.json();
-                        currentUser = userData;
-                        showApp();
-                    } else {
-                        localStorage.removeItem('accessToken');
-                        localStorage.removeItem('refreshToken');
-                        showLogin();
-                    }
-                } else {
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('refreshToken');
-                    showLogin();
-                }
-            }).catch(() => {
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                showLogin();
-            });
-        } else {
-            showLogin();
-        }
-
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideUp {
-                from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        const savedToken = getCookie('accessToken');
+        const savedUserCookie = getCookie('currentUser');
+        
+        if (savedToken && savedUserCookie) {
+            accessToken = savedToken;
+            refreshToken = getCookie('refreshToken');
+            try {
+                const userData = JSON.parse(savedUserCookie);
+                currentUser = userData;
+                showApp();
+            } catch (e) {
+                window.location.href = '/login.html';
             }
-        `;
-        document.head.appendChild(style);
+        } else {
+            window.location.href = '/login.html';
+        }
     </script>
 </body>
 </html>
