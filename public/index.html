@@ -798,14 +798,15 @@
             peer.on('open', (id) => {
                 console.log('Peer ready! ID:', id);
                 userPeerIds[currentUser.id] = id;
-                if (socket) {
+                if (socket && socket.connected) {
                     socket.emit('peer-ready', { peerId: id });
                 }
             });
             
             peer.on('call', (call) => {
                 incomingCallData = call;
-                document.getElementById('callerName').innerHTML = (call.metadata?.fromName || 'Someone') + ' is calling you!';
+                const callerName = call.metadata?.fromName || 'Someone';
+                document.getElementById('callerName').innerHTML = callerName + ' is calling you!';
                 document.getElementById('incomingCall').classList.add('show');
                 startCallRingtone();
             });
@@ -853,10 +854,20 @@
                 return;
             }
             
+            const friendPeerId = userPeerIds[friendId];
+            if (!friendPeerId) {
+                showToast(friendName + ' is not connected for calls. Make sure they are online.', 'error');
+                return;
+            }
+            
             document.getElementById('callingStatus').style.display = 'block';
             document.getElementById('callContainer').classList.add('active');
             
             try {
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 
                 const videoTrack = localStream.getVideoTracks()[0];
@@ -866,13 +877,6 @@
                 
                 document.getElementById('localVideo').srcObject = localStream;
                 updateCallUI();
-                
-                const friendPeerId = userPeerIds[friendId];
-                if (!friendPeerId) {
-                    showToast(friendName + ' is offline for calls', 'error');
-                    endCall();
-                    return;
-                }
                 
                 const call = peer.call(friendPeerId, localStream, {
                     metadata: { fromName: currentUser.username }
@@ -912,6 +916,10 @@
             stopCallRingtone();
             
             try {
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 
                 const videoTrack = localStream.getVideoTracks()[0];
@@ -1097,6 +1105,9 @@
             socket.on('connect', () => {
                 console.log('Socket connected');
                 socket.emit('user-online', accessToken);
+                if (peer && peer.id) {
+                    socket.emit('peer-ready', { peerId: peer.id });
+                }
             });
             socket.on('new-message', (message) => {
                 if (message.senderId !== currentUser.id) {
@@ -1135,8 +1146,10 @@
                 }
             });
             socket.on('peer-ready', (data) => {
-                userPeerIds[data.userId] = data.peerId;
-                console.log('Peer ready for user:', data.userId, data.peerId);
+                if (data.userId !== currentUser.id) {
+                    userPeerIds[data.userId] = data.peerId;
+                    console.log('Peer ready for user:', data.userId, data.peerId);
+                }
             });
         }
 
