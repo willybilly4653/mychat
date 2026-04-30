@@ -855,7 +855,8 @@
         }
 
         function initPeer() {
-            peer = new Peer(currentUser.id + '_' + Date.now(), {
+            const peerId = currentUser.id + '_' + Date.now();
+            peer = new Peer(peerId, {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -870,12 +871,14 @@
             peer.on('open', (id) => {
                 console.log('Peer ready! ID:', id);
                 userPeerIds[currentUser.id] = id;
-                socket.emit('peer-ready', { peerId: id });
+                if (socket) {
+                    socket.emit('peer-ready', { peerId: id });
+                }
             });
             
             peer.on('call', (call) => {
                 incomingCallData = call;
-                document.getElementById('callerName').innerHTML = call.metadata?.fromName + ' is calling you!';
+                document.getElementById('callerName').innerHTML = (call.metadata?.fromName || 'Someone') + ' is calling you!';
                 document.getElementById('incomingCall').classList.add('show');
                 startCallRingtone();
             });
@@ -918,7 +921,13 @@
         }
 
         async function startVideoCall(friendId, friendName) {
+            if (!peer) {
+                showToast('Call system initializing...', 'error');
+                return;
+            }
+            
             document.getElementById('callingStatus').style.display = 'block';
+            document.getElementById('callContainer').classList.add('active');
             
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -929,12 +938,11 @@
                 }
                 
                 document.getElementById('localVideo').srcObject = localStream;
-                document.getElementById('callContainer').classList.add('active');
                 updateCallUI();
                 
                 const friendPeerId = userPeerIds[friendId];
                 if (!friendPeerId) {
-                    showToast('Friend is not connected for calls', 'error');
+                    showToast(friendName + ' is offline for calls', 'error');
                     endCall();
                     return;
                 }
@@ -1459,7 +1467,7 @@
                             <div class="friend-name">${escapeHtml(friend.username)}</div>
                             <div class="friend-status ${friend.online ? 'online' : ''}">${friend.online ? 'Online' : 'Offline'}</div>
                         </div>
-                        <button class="call-btn" onclick="startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
+                        <button class="call-btn" onclick="event.stopPropagation(); startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
                     </div>
                 `).join('');
             } catch (error) { console.error('Failed to load friends:', error); }
