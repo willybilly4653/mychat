@@ -813,7 +813,6 @@
             
             peer.on('error', (err) => {
                 console.error('Peer error:', err);
-                showToast('Call error: ' + err.message, 'error');
             });
         }
 
@@ -849,14 +848,14 @@
         }
 
         async function startVideoCall(friendId, friendName) {
-            if (!peer) {
+            if (!peer || !peer.id) {
                 showToast('Call system initializing...', 'error');
                 return;
             }
             
             const friendPeerId = userPeerIds[friendId];
             if (!friendPeerId) {
-                showToast(friendName + ' is not connected for calls. Make sure they are online.', 'error');
+                showToast(friendName + ' is offline or not available for calls', 'error');
                 return;
             }
             
@@ -895,15 +894,14 @@
                 
                 call.on('error', (err) => {
                     console.error('Call error:', err);
-                    showToast('Call failed: ' + err.message, 'error');
+                    showToast('Call failed', 'error');
                     endCall();
                 });
                 
                 currentCall = call;
-                showToast('Calling ' + friendName + '...', 'info');
             } catch (err) {
                 console.error('Camera error:', err);
-                showToast('Cannot access camera or microphone. Please check permissions.', 'error');
+                showToast('Cannot access camera or microphone', 'error');
                 document.getElementById('callingStatus').style.display = 'none';
                 endCall();
             }
@@ -950,7 +948,7 @@
                 incomingCallData = null;
             } catch (err) {
                 console.error('Camera error:', err);
-                showToast('Cannot access camera or microphone. Please check permissions.', 'error');
+                showToast('Cannot access camera or microphone', 'error');
                 endCall();
             }
         }
@@ -962,7 +960,6 @@
                 incomingCallData = null;
             }
             document.getElementById('incomingCall').classList.remove('show');
-            showToast('Call rejected', 'info');
         }
 
         function endCall() {
@@ -1239,9 +1236,8 @@
                     if (socket) {
                         socket.emit('friend-request-accepted', { friendId });
                     }
-                    setTimeout(() => {
-                        location.reload();
-                    }, 500);
+                } else {
+                    showToast('Failed to accept request', 'error');
                 }
             } catch (error) {
                 showToast('Failed to accept request', 'error');
