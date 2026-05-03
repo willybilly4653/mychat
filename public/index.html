@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <title>Mychat</title>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
@@ -248,7 +248,8 @@
             border-radius: 20px;
             padding: 6px 12px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
+            font-weight: bold;
             transition: all 0.2s;
         }
 
@@ -715,7 +716,7 @@
                 date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
                 expires = '; expires=' + date.toUTCString();
             }
-            document.cookie = name + '=' + (value || '') + expires + '; path=/; SameSite=Lax';
+            document.cookie = name + '=' + (value || '') + expires + '; path=/';
         }
 
         function deleteCookie(name) {
@@ -725,13 +726,11 @@
         function updateCallBadges() {
             const muteBadge = document.getElementById('muteBadge');
             const cameraBadge = document.getElementById('cameraBadge');
-            
             if (isMuted) {
                 muteBadge.style.display = 'flex';
             } else {
                 muteBadge.style.display = 'none';
             }
-            
             if (isVideoOff) {
                 cameraBadge.style.display = 'flex';
             } else {
@@ -743,7 +742,7 @@
             const audio = document.getElementById('messageSound');
             if (audio) {
                 audio.currentTime = 0;
-                audio.play().catch(e => console.log('Audio play failed:', e));
+                audio.play().catch(e => {});
                 setTimeout(() => {
                     if (audio) audio.pause();
                 }, 2000);
@@ -756,7 +755,7 @@
                 callRingtone = audio;
                 audio.currentTime = 0;
                 audio.loop = true;
-                audio.play().catch(e => console.log('Ringtone play failed:', e));
+                audio.play().catch(e => {});
                 callRingtoneTimeout = setTimeout(() => {
                     if (callRingtone) {
                         callRingtone.pause();
@@ -782,7 +781,7 @@
         }
 
         function initPeer() {
-            const peerId = currentUser.id + '_' + Date.now();
+            const peerId = currentUser.id;
             peer = new Peer(peerId, {
                 config: {
                     iceServers: [
@@ -796,7 +795,6 @@
             });
             
             peer.on('open', (id) => {
-                console.log('Peer ready! ID:', id);
                 userPeerIds[currentUser.id] = id;
                 if (socket && socket.connected) {
                     socket.emit('peer-ready', { peerId: id });
@@ -812,7 +810,7 @@
             });
             
             peer.on('error', (err) => {
-                console.error('Peer error:', err);
+                showToast('Call error: ' + err.message, 'error');
             });
         }
 
@@ -893,14 +891,11 @@
                 });
                 
                 call.on('error', (err) => {
-                    console.error('Call error:', err);
-                    showToast('Call failed', 'error');
                     endCall();
                 });
                 
                 currentCall = call;
             } catch (err) {
-                console.error('Camera error:', err);
                 showToast('Cannot access camera or microphone', 'error');
                 document.getElementById('callingStatus').style.display = 'none';
                 endCall();
@@ -939,7 +934,6 @@
                     endCall();
                 });
                 call.on('error', (err) => {
-                    console.error('Call error:', err);
                     endCall();
                 });
                 
@@ -947,7 +941,6 @@
                 document.getElementById('incomingCall').classList.remove('show');
                 incomingCallData = null;
             } catch (err) {
-                console.error('Camera error:', err);
                 showToast('Cannot access camera or microphone', 'error');
                 endCall();
             }
@@ -1029,12 +1022,6 @@
             setTimeout(() => toast.remove(), 2000);
         }
 
-        function containsProfanity(text) {
-            const badWords = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'hell', 'dick', 'pussy', 'cock', 'whore', 'slut', 'cunt', 'nigger', 'fag', 'retard'];
-            const lowerText = text.toLowerCase();
-            return badWords.some(word => lowerText.includes(word));
-        }
-
         function containsEmoji(text) {
             const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/u;
             return emojiRegex.test(text);
@@ -1075,7 +1062,6 @@
                     return true;
                 }
             } catch (error) {
-                console.error('Token refresh failed:', error);
             }
             return false;
         }
@@ -1100,7 +1086,6 @@
         function initSocket() {
             socket = io();
             socket.on('connect', () => {
-                console.log('Socket connected');
                 socket.emit('user-online', accessToken);
                 if (peer && peer.id) {
                     socket.emit('peer-ready', { peerId: peer.id });
@@ -1145,7 +1130,6 @@
             socket.on('peer-ready', (data) => {
                 if (data.userId !== currentUser.id) {
                     userPeerIds[data.userId] = data.peerId;
-                    console.log('Peer ready for user:', data.userId, data.peerId);
                 }
             });
         }
@@ -1175,7 +1159,7 @@
                             <button class="add-friend-small" onclick="sendFriendRequest('${user.id}', '${escapeHtml(user.username)}')">Add</button>
                         </div>
                     `).join('');
-                } catch (error) { console.error('Search failed:', error); }
+                } catch (error) { }
             }, 300);
         }
 
@@ -1220,7 +1204,7 @@
                         </div>
                     </div>
                 `).join('');
-            } catch (error) { console.error('Failed to load requests:', error); }
+            } catch (error) { }
         }
 
         async function acceptRequest(friendId) {
@@ -1236,8 +1220,6 @@
                     if (socket) {
                         socket.emit('friend-request-accepted', { friendId });
                     }
-                } else {
-                    showToast('Failed to accept request', 'error');
                 }
             } catch (error) {
                 showToast('Failed to accept request', 'error');
@@ -1278,7 +1260,7 @@
                         <button class="call-btn" onclick="event.stopPropagation(); startVideoCall('${friend.id}', '${escapeHtml(friend.username)}')">Video Call</button>
                     </div>
                 `).join('');
-            } catch (error) { console.error('Failed to load friends:', error); }
+            } catch (error) { }
         }
 
         function toggleSearch() {
@@ -1294,7 +1276,6 @@
             document.getElementById('chatWith').innerHTML = 'Chat with ' + friendName;
             document.getElementById('typingStatus').innerHTML = '';
             await loadMessages();
-            loadFriends();
             document.getElementById('messageInput').focus();
         }
 
@@ -1315,7 +1296,7 @@
                     </div>
                 `).join('');
                 container.scrollTop = container.scrollHeight;
-            } catch (error) { console.error('Failed to load messages:', error); }
+            } catch (error) { }
         }
 
         function sendMessage() {
