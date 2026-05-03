@@ -847,13 +847,8 @@
 
         async function startVideoCall(friendId, friendName) {
             if (!peer || !peer.id) {
-                showToast('Call system initializing...', 'error');
-                return;
-            }
-            
-            const friendPeerId = userPeerIds[friendId];
-            if (!friendPeerId) {
-                showToast(friendName + ' is offline or not available for calls', 'error');
+                showToast('Call system initializing... Please wait', 'error');
+                setTimeout(() => startVideoCall(friendId, friendName), 1000);
                 return;
             }
             
@@ -875,6 +870,21 @@
                 document.getElementById('localVideo').srcObject = localStream;
                 updateCallUI();
                 
+                let friendPeerId = userPeerIds[friendId];
+                
+                if (!friendPeerId) {
+                    showToast('Attempting to connect to ' + friendName + '...', 'info');
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    friendPeerId = userPeerIds[friendId];
+                    
+                    if (!friendPeerId) {
+                        showToast('Unable to reach ' + friendName + '. The call may still connect if they are online.', 'warning');
+                        friendPeerId = friendId;
+                    }
+                }
+                
                 const call = peer.call(friendPeerId, localStream, {
                     metadata: { fromName: currentUser.username }
                 });
@@ -895,6 +905,13 @@
                 });
                 
                 currentCall = call;
+                
+                setTimeout(() => {
+                    if (currentCall && document.getElementById('callingStatus').style.display !== 'none') {
+                        showToast('If call doesn\'t connect, the other user may be offline', 'warning');
+                    }
+                }, 8000);
+                
             } catch (err) {
                 showToast('Cannot access camera or microphone', 'error');
                 document.getElementById('callingStatus').style.display = 'none';
@@ -1111,6 +1128,7 @@
             socket.on('friend-request', (data) => {
                 showToast(data.fromUsername + ' sent you a friend request!', 'info');
                 loadPendingRequests();
+                loadFriends();
             });
             socket.on('friend-request-accepted', (data) => {
                 showToast(data.fromUsername + ' accepted your friend request!', 'success');
